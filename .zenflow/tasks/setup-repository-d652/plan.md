@@ -68,16 +68,23 @@ Create shared Zod schemas and TypeScript types.
 
 ### [ ] Step: Backend Server Setup
 
-Set up the Node.js backend server with tRPC router and frontend serving.
+Set up the Node.js backend server with tRPC router (subscription-first) and frontend serving.
 
 **Tasks**:
-- Create `src/server/trpc.ts` - tRPC router with queries, mutations, subscriptions
+- Create `src/server/trpc.ts` - tRPC router with:
+  - Mutations: `controlDevice`, `discoverDevices`
+  - Subscriptions: `onDevices` (primary data source), `onDeviceUpdate`, `onDeviceDiscovered`
+  - Minimal queries (only if needed for non-reactive data)
 - Create `src/server/context.ts` - tRPC context factory (can be minimal for now)
 - Create `src/server/index.ts` - Express HTTP server with:
   - tRPC HTTP handler (for queries/mutations)
   - tRPC WebSocket handler using `applyWSSHandler` (for subscriptions)
   - Frontend serving (production) or proxy to Vite (development)
-- Create `src/server/services/shellyService.ts` - Stub service with EventEmitter
+- Create `src/server/services/shellyService.ts` - Stub service with EventEmitter that:
+  - Maintains device state
+  - Emits `devicesChanged` when full list changes
+  - Emits `deviceUpdate` for individual device updates
+  - Provides initial data immediately on subscription
 - Configure development script (tsx or ts-node-dev) in package.json
 - Add `concurrently` to run both Vite and server with single `dev` command
 
@@ -122,22 +129,25 @@ Set up the React frontend with Vite, Mantine, and tRPC client.
 
 ### [ ] Step: tRPC Integration & Type Safety Testing
 
-Integrate and test end-to-end type-safe communication with tRPC.
+Integrate and test end-to-end type-safe communication with tRPC (subscription-first).
 
 **Tasks**:
-- Test tRPC queries in DeviceList component (use `trpc.getDevices.useQuery()`)
-- Test tRPC mutations (use `trpc.controlDevice.useMutation()`)
-- Test tRPC subscriptions (use `trpc.onDeviceUpdate.useSubscription()`)
+- Implement `onDevices` subscription in DeviceList component (primary data source)
+- Implement mutations (`controlDevice`, `discoverDevices`) with proper callbacks
+- Test that subscriptions receive initial data immediately
+- Test that mutations trigger subscription updates automatically
 - Verify type inference by modifying router procedure and seeing errors in client
 - Add error handling and loading states in components
-- Test that Shelly service EventEmitter triggers subscription updates
+- Test connection state handling (disconnection/reconnection)
 
 **Verification**:
 - Start both with `pnpm run dev` (or separately: `pnpm run dev:vite` and `pnpm run dev:server`)
 - Access application at localhost:3001 (backend proxies to frontend)
-- tRPC queries fetch data successfully
-- tRPC mutations execute successfully
-- tRPC subscriptions establish WebSocket connection and receive updates
+- Device list appears immediately via `onDevices` subscription
+- Device list updates reactively when backend state changes
+- Mutations execute successfully
+- Executing mutation causes subscription to emit updated data
+- WebSocket connection established (check DevTools Network tab)
 - No CORS errors
 - Modifying procedure types in `src/server/trpc.ts` causes immediate TypeScript errors in client
 - All tRPC operations are fully typed (autocomplete works)
