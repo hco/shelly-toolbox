@@ -67,19 +67,24 @@ Create shared TypeScript types for communication.
 
 ### [ ] Step: Backend Server Setup
 
-Set up the Node.js backend server with WebSocket support.
+Set up the Node.js backend server with WebSocket support and frontend serving.
 
 **Tasks**:
 - Create `src/server/index.ts` - Express HTTP server + Socket.io setup
+- Add frontend serving logic:
+  - Production: Serve static files from `dist/` folder
+  - Development: Proxy to Vite dev server (http://localhost:5173) using `http-proxy-middleware`
 - Create `src/server/websocket.ts` - WebSocket event handlers using shared types
 - Create `src/server/services/shellyService.ts` - Stub service for device management
 - Configure development script (tsx or ts-node-dev) in package.json
-- Add server build script if needed
+- Add `concurrently` to run both Vite and server with single `dev` command
 
 **Verification**:
-- `pnpm run dev:server` starts server without errors
-- WebSocket server listens on configured port (e.g., 3001)
-- TypeScript compilation succeeds
+- `pnpm run dev:server` starts server without errors (port 3001)
+- `pnpm run dev` starts both Vite and server
+- Accessing localhost:3001 shows proxied Vite dev server
+- WebSocket server listens correctly
+- No CORS errors in browser console
 - Type safety works (changing shared types causes errors)
 
 **References**: See `spec.md` - Implementation Approach section 3
@@ -121,10 +126,12 @@ Integrate WebSocket communication between frontend and backend with full type sa
 - Add error handling for WebSocket events
 
 **Verification**:
-- Start both frontend (`pnpm run dev`) and backend (`pnpm run dev:server`)
+- Start both with `pnpm run dev` (or separately: `pnpm run dev:vite` and `pnpm run dev:server`)
+- Access application at localhost:3001 (backend proxies to frontend)
 - WebSocket connection establishes (check browser console)
 - Can send test messages from frontend to backend
 - Backend can broadcast to connected clients
+- No CORS errors
 - Modifying `src/shared/websocket.ts` causes TypeScript errors in both client and server
 
 **References**: See `spec.md` - Type-Safe WebSocket Communication section

@@ -70,8 +70,12 @@ shelly-toolbox/
 - Set up Node.js/TypeScript server with Express
 - Implement WebSocket server using Socket.io with type-safe handlers
 - Use shared types from `src/shared/`
+- **Serve frontend**: 
+  - Production: Serve built frontend from `dist/` folder
+  - Development: Proxy requests to Vite dev server (http://localhost:5173)
 - Add development script with hot-reload (tsx or ts-node-dev)
 - Create stub Shelly service for device management
+- No CORS configuration needed (same origin)
 
 ### 4. Frontend Application (`src/client/`)
 - Set up Vite with React and TypeScript
@@ -123,7 +127,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>();
 import { io, Socket } from 'socket.io-client';
 import type { ServerToClientEvents, ClientToServerEvents } from '@/shared/websocket';
 
-const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io('http://localhost:3001');
+// Use relative URL - no hardcoded host/port, avoids CORS
+const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
 ```
 
 ### 6. Development Tooling
@@ -155,7 +160,7 @@ const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io('http://lo
 - `constants.ts` - Shared constants
 
 #### src/server/
-- `index.ts` - Server entry point
+- `index.ts` - Server entry point (Express + Socket.io + frontend serving/proxy)
 - `websocket.ts` - WebSocket server implementation
 - `services/shellyService.ts` - Shelly device management logic (stub)
 - `.env.example` - Environment variables template (if needed)
@@ -225,16 +230,19 @@ interface DeviceCommand {
 3. **Linting**: `pnpm run lint` - Should pass without errors
 
 ### Functional Verification
-1. **Backend Server**:
-   - Start backend: `pnpm run dev:server`
-   - Verify server starts on configured port (e.g., 3001)
+1. **Development Mode**:
+   - Start Vite dev server: `pnpm run dev:vite` (runs on port 5173)
+   - Start backend server: `pnpm run dev:server` (runs on port 3001, proxies to Vite)
+   - Or use single command: `pnpm run dev` (starts both concurrently)
+   - Open browser to localhost:3001 (backend serves/proxies frontend)
+   - Verify Mantine UI renders correctly
    - Verify WebSocket server is listening
    
-2. **Frontend Application**:
-   - Start frontend: `pnpm run dev` or `pnpm run dev:client`
-   - Verify Vite dev server starts
-   - Verify Mantine UI renders correctly
-   - Open browser to localhost:5173 (default Vite port)
+2. **Production Mode**:
+   - Build frontend: `pnpm run build`
+   - Start backend: `pnpm run start`
+   - Backend serves built frontend from `dist/` folder
+   - Open browser to localhost:3001
 
 3. **Type Safety**:
    - Modify a WebSocket event signature in `src/shared/websocket.ts`
@@ -266,6 +274,9 @@ interface DeviceCommand {
 - **Latest versions**: All dependencies installed with `@latest` tag
 - **Mantine over Material-UI/Ant Design**: Modern, TypeScript-first, excellent documentation, active development
 - **Vite over Create React App**: Faster dev server, better build performance, modern tooling
+- **Backend serves frontend**: No CORS issues, single origin, simpler deployment
+  - Development: Backend proxies to Vite dev server
+  - Production: Backend serves static files from `dist/`
 
 ### Future Considerations
 - Testing infrastructure (Vitest for unit tests, Playwright for E2E)
@@ -282,8 +293,10 @@ interface DeviceCommand {
   - **Mitigation**: TypeScript path aliases (`@/shared/*`), strict TypeScript checking
 - **WebSocket connection management**: Handling disconnections, reconnections
   - **Mitigation**: Socket.io handles this automatically
-- **Build process**: Server needs separate build/run process from frontend
-  - **Mitigation**: Separate npm scripts for server and client development
+- **Development workflow**: Running both Vite dev server and backend server
+  - **Mitigation**: Use `concurrently` to run both with single command
+- **Proxy configuration**: Backend must correctly proxy to Vite in development
+  - **Mitigation**: Use `http-proxy-middleware` for Express proxy setup
 
 ---
 
