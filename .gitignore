@@ -44,3 +44,6 @@ coverage/
 # Temporary files
 *.tmp
 .temp/
+
+# TanStack Router generated files
+src/client/routeTree.gen.ts

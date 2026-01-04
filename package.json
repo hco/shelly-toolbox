@@ -19,6 +19,8 @@
     "@mantine/core": "latest",
     "@mantine/hooks": "latest",
     "@tanstack/react-query": "latest",
+    "@tanstack/react-router": "^1.144.0",
+    "@tanstack/react-router-devtools": "^1.144.0",
     "@trpc/client": "latest",
     "@trpc/react-query": "latest",
     "@trpc/server": "latest",
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "latest",
+    "@tanstack/router-plugin": "^1.145.4",
     "@types/express": "latest",
     "@types/node": "latest",
     "@types/react": "latest",

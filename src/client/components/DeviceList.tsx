@@ -11,13 +11,47 @@ import {
   Table,
   Text,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
+import type { AuthStatus } from '@/shared/types.js';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DevicesOutput = RouterOutputs['onDevices'];
+
+const AUTH_STATUS_CONFIG: Record<
+  AuthStatus,
+  { color: string; label: string; tooltip: string; variant: string }
+> = {
+  unknown: {
+    color: 'gray',
+    label: 'Unknown',
+    tooltip: 'Could not determine security status',
+    variant: 'light',
+  },
+  unprotected: {
+    color: 'orange',
+    label: 'No password',
+    tooltip:
+      'This device has no password protection. Anyone on your network can control it.',
+    variant: 'filled',
+  },
+  correct_password: {
+    color: 'green',
+    label: 'Protected',
+    tooltip: 'This device is protected with your configured password',
+    variant: 'light',
+  },
+  different_password: {
+    color: 'yellow',
+    label: 'Different password',
+    tooltip:
+      'This device is protected but uses a different password than configured',
+    variant: 'filled',
+  },
+};
 
 export function DeviceList() {
   const [devices, setDevices] = useState<DevicesOutput>([] as DevicesOutput);
@@ -96,6 +130,7 @@ export function DeviceList() {
                 <Table.Th>Type</Table.Th>
                 <Table.Th>IP</Table.Th>
                 <Table.Th>Status</Table.Th>
+                <Table.Th>Security</Table.Th>
                 <Table.Th>Last seen</Table.Th>
                 <Table.Th>Actions</Table.Th>
               </Table.Tr>
@@ -110,6 +145,21 @@ export function DeviceList() {
                     <Badge color={device.online ? 'green' : 'gray'}>
                       {device.online ? 'Online' : 'Offline'}
                     </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    {(() => {
+                      const config = AUTH_STATUS_CONFIG[device.authStatus];
+                      return (
+                        <Tooltip label={config.tooltip}>
+                          <Badge
+                            color={config.color}
+                            variant={config.variant as 'light' | 'filled'}
+                          >
+                            {config.label}
+                          </Badge>
+                        </Tooltip>
+                      );
+                    })()}
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm" c="dimmed">

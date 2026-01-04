@@ -6,6 +6,13 @@ export const DeviceCapabilitySchema = z.object({
   state: z.unknown(),
 });
 
+export const AuthStatusSchema = z.enum([
+  'unknown',           // Couldn't determine auth status
+  'unprotected',       // No password set
+  'correct_password',  // Protected with the configured password
+  'different_password' // Protected with a different password
+]);
+
 export const DeviceSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -14,7 +21,11 @@ export const DeviceSchema = z.object({
   online: z.boolean(),
   lastSeen: z.iso.datetime(),
   capabilities: z.array(DeviceCapabilitySchema),
+  gen: z.union([z.literal(1), z.literal(2)]),
+  authStatus: AuthStatusSchema,
 });
+
+export type AuthStatus = z.infer<typeof AuthStatusSchema>;
 
 export const DeviceCommandSchema = z.object({
   capability: z.string(),

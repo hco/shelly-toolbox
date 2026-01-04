@@ -92,13 +92,14 @@ class MdnsDiscovery extends EventEmitter {
     }
 
     // Shelly mDNS names are like "shellyplus1-aabbcc" or "shelly1-AABBCC"
-    // Gen2 devices have "plus", "pro", "mini" in the name
+    // Gen2+ devices have "plus", "pro", "mini", "blu", or "g3" in the name
     const nameLower = service.name.toLowerCase();
     const isGen2 =
       nameLower.includes('plus') ||
       nameLower.includes('pro') ||
       nameLower.includes('mini') ||
-      nameLower.includes('blu');
+      nameLower.includes('blu') ||
+      nameLower.includes('g3');
 
     // Extract device type from service name (e.g., "shellyplus1" -> "Shelly Plus 1")
     const type = this.formatDeviceType(service.name);
