@@ -22,6 +22,7 @@
     "@trpc/client": "latest",
     "@trpc/react-query": "latest",
     "@trpc/server": "latest",
+    "bonjour-service": "^1.3.0",
     "express": "latest",
     "http-proxy-middleware": "^3.0.5",
     "react": "latest",

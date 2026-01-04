@@ -1,13 +1,53 @@
 import { EventEmitter } from 'events';
 import type { Device, DeviceCommand } from '@/shared/types.js';
+import { mdnsDiscovery, type MdnsDevice } from './mdnsDiscovery.js';
 
 class ShellyService extends EventEmitter {
-  private devices: Device[] = [
-    {
-      id: 'shelly-1',
-      name: 'Living Room Light',
-      type: 'Shelly 1',
-      ipAddress: '192.168.1.100',
+  private devices: Map<string, Device> = new Map();
+
+  constructor() {
+    super();
+    this.setupMdnsListeners();
+    mdnsDiscovery.start();
+  }
+
+  private setupMdnsListeners(): void {
+    mdnsDiscovery.on('deviceFound', (mdnsDevice: MdnsDevice) => {
+      const device = this.createDeviceFromMdns(mdnsDevice);
+      this.devices.set(device.id, device);
+      this.emit('deviceDiscovered', device);
+      this.emit('devicesChanged');
+    });
+
+    mdnsDiscovery.on('deviceUpdated', (mdnsDevice: MdnsDevice) => {
+      const existing = this.devices.get(mdnsDevice.id);
+      if (existing) {
+        existing.ipAddress = mdnsDevice.ipAddress;
+        existing.lastSeen = new Date().toISOString();
+        existing.online = true;
+        this.emit('deviceUpdate', existing);
+        this.emit('devicesChanged');
+      }
+    });
+
+    mdnsDiscovery.on('deviceLost', (mdnsDevice: MdnsDevice) => {
+      const existing = this.devices.get(mdnsDevice.id);
+      if (existing) {
+        existing.online = false;
+        this.emit('deviceUpdate', existing);
+        this.emit('devicesChanged');
+      }
+    });
+  }
+
+  private createDeviceFromMdns(mdnsDevice: MdnsDevice): Device {
+    // Create a basic device with switch capability
+    // Full capability detection would require HTTP calls to the device
+    return {
+      id: mdnsDevice.id,
+      name: mdnsDevice.name,
+      type: mdnsDevice.type,
+      ipAddress: mdnsDevice.ipAddress,
       online: true,
       lastSeen: new Date().toISOString(),
       capabilities: [
@@ -17,45 +57,15 @@ class ShellyService extends EventEmitter {
           state: { on: false },
         },
       ],
-    },
-    {
-      id: 'shelly-2',
-      name: 'Kitchen Dimmer',
-      type: 'Shelly Dimmer 2',
-      ipAddress: '192.168.1.101',
-      online: true,
-      lastSeen: new Date().toISOString(),
-      capabilities: [
-        {
-          type: 'dimmer',
-          id: 'light-0',
-          state: { on: true, brightness: 75 },
-        },
-      ],
-    },
-    {
-      id: 'shelly-3',
-      name: 'Bedroom Sensor',
-      type: 'Shelly H&T',
-      ipAddress: '192.168.1.102',
-      online: false,
-      lastSeen: new Date(Date.now() - 3600000).toISOString(),
-      capabilities: [
-        {
-          type: 'sensor',
-          id: 'temp-0',
-          state: { temperature: 22.5, humidity: 45 },
-        },
-      ],
-    },
-  ];
+    };
+  }
 
   getDevices(): Device[] {
-    return this.devices;
+    return Array.from(this.devices.values());
   }
 
   async controlDevice(deviceId: string, command: DeviceCommand): Promise<void> {
-    const device = this.devices.find((d) => d.id === deviceId);
+    const device = this.devices.get(deviceId);
     if (!device) {
       throw new Error(`Device ${deviceId} not found`);
     }
@@ -84,29 +94,9 @@ class ShellyService extends EventEmitter {
   }
 
   async startDiscovery(): Promise<{ discovered: number }> {
-    setTimeout(() => {
-      const newDevice: Device = {
-        id: `shelly-${Date.now()}`,
-        name: 'New Discovered Device',
-        type: 'Shelly 1',
-        ipAddress: `192.168.1.${100 + this.devices.length}`,
-        online: true,
-        lastSeen: new Date().toISOString(),
-        capabilities: [
-          {
-            type: 'switch',
-            id: 'relay-0',
-            state: { on: false },
-          },
-        ],
-      };
-
-      this.devices.push(newDevice);
-      this.emit('deviceDiscovered', newDevice);
-      this.emit('devicesChanged');
-    }, 2000);
-
-    return { discovered: 0 };
+    // Restart mDNS browsing to find new devices
+    mdnsDiscovery.restart();
+    return { discovered: this.devices.size };
   }
 }
 

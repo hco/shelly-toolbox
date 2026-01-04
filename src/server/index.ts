@@ -47,12 +47,24 @@ const server = app.listen(SERVER_PORT, () => {
   console.log(`Server listening on http://localhost:${SERVER_PORT}`);
 });
 
-const wss = new WebSocketServer({ server });
+// Use noServer mode to handle WebSocket upgrades manually
+// This prevents conflicts with Vite's HMR WebSocket in dev mode
+const wss = new WebSocketServer({ noServer: true });
 
 applyWSSHandler({
   wss,
   router: appRouter,
   createContext,
+});
+
+// Only handle /trpc WebSocket upgrades, let others pass through to proxy
+server.on('upgrade', (request, socket, head) => {
+  if (request.url?.startsWith('/trpc')) {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
+  // Non-/trpc WebSocket requests (like Vite HMR) are handled by the proxy
 });
 
 console.log(`WebSocket server is running`);

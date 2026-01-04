@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Anchor,
   Badge,
   Button,
   Card,
@@ -22,10 +23,8 @@ export function DeviceList() {
   const [devices, setDevices] = useState<DevicesOutput>([] as DevicesOutput);
   const [hasInitialData, setHasInitialData] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
 
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
-  const controlDeviceMutation = trpc.controlDevice.useMutation();
 
   trpc.onDevices.useSubscription(undefined, {
     onStarted() {
@@ -51,10 +50,6 @@ export function DeviceList() {
 
   const isInitialLoading =
     !hasInitialData || discoverDevicesMutation.status === 'pending';
-
-  const isDeviceBusy = (deviceId: string) =>
-    controlDeviceMutation.status === 'pending' &&
-    controlDeviceMutation.variables?.deviceId === deviceId;
 
   return (
     <Stack gap="md">
@@ -106,75 +101,34 @@ export function DeviceList() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {devices.map((device) => {
-                const primarySwitch = device.capabilities.find(
-                  (capability) => capability.type === 'switch'
-                );
-
-                const canToggle = Boolean(primarySwitch);
-
-                const handleToggle = () => {
-                  if (!primarySwitch) {
-                    return;
-                  }
-
-                  setError(null);
-                  setActiveDeviceId(device.id);
-
-                  controlDeviceMutation.mutate(
-                    {
-                      deviceId: device.id,
-                      command: {
-                        capability: primarySwitch.id,
-                        action: 'toggle',
-                      },
-                    },
-                    {
-                      onError(err) {
-                        setError(err.message);
-                        setActiveDeviceId(null);
-                      },
-                      onSuccess() {
-                        setActiveDeviceId(null);
-                      },
-                    }
-                  );
-                };
-
-                const isBusy =
-                  isDeviceBusy(device.id) || activeDeviceId === device.id;
-
-                return (
-                  <Table.Tr key={device.id}>
-                    <Table.Td>{device.name}</Table.Td>
-                    <Table.Td>{device.type}</Table.Td>
-                    <Table.Td>{device.ipAddress}</Table.Td>
-                    <Table.Td>
-                      <Badge color={device.online ? 'green' : 'gray'}>
-                        {device.online ? 'Online' : 'Offline'}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm" c="dimmed">
-                        {new Date(device.lastSeen).toLocaleString()}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <Button
-                          size="xs"
-                          variant="light"
-                          onClick={handleToggle}
-                          disabled={!canToggle}
-                          loading={isBusy}
-                        >
-                          Toggle
-                        </Button>
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                );
-              })}
+              {devices.map((device) => (
+                <Table.Tr key={device.id}>
+                  <Table.Td>{device.name}</Table.Td>
+                  <Table.Td>{device.type}</Table.Td>
+                  <Table.Td>{device.ipAddress}</Table.Td>
+                  <Table.Td>
+                    <Badge color={device.online ? 'green' : 'gray'}>
+                      {device.online ? 'Online' : 'Offline'}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm" c="dimmed">
+                      {new Date(device.lastSeen).toLocaleString()}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Anchor
+                      href={`http://${device.ipAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button size="xs" variant="light">
+                        Open
+                      </Button>
+                    </Anchor>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
             </Table.Tbody>
           </Table>
         </Card>

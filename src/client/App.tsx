@@ -20,10 +20,10 @@ export function App() {
         : 'Disconnected';
 
   return (
-    <AppShell>
+    <AppShell header={{ height: 60 }}>
       <AppShell.Header>
         <Container size="lg">
-          <Group h="4rem" justify="space-between">
+          <Group h={60} justify="space-between">
             <div>
               <Title order={3}>Shelly Toolbox</Title>
               <Text c="dimmed">Local Shelly device manager</Text>
