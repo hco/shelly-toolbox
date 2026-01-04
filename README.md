@@ -45,9 +45,21 @@ pnpm run dev:vite
 pnpm run dev:server
 ```
 
+## Scripts
+
+- `pnpm run dev` - Start both frontend and backend in development mode
+- `pnpm run dev:vite` - Start Vite dev server only
+- `pnpm run dev:server` - Start backend server only
+- `pnpm run build` - Build frontend for production
+- `pnpm run start` - Start production server
+- `pnpm run typecheck` - Run TypeScript type checking
+- `pnpm run lint` - Run ESLint
+- `pnpm run lint:fix` - Fix ESLint errors
+- `pnpm run format` - Format code with Prettier
+
 ## Build
 
-Build the frontend:
+Build the project (typecheck and frontend bundle):
 
 ```bash
 pnpm run build
@@ -60,18 +72,6 @@ Start the production server (serves built frontend):
 ```bash
 pnpm run start
 ```
-
-## Scripts
-
-- `pnpm run dev` - Start both frontend and backend in development mode
-- `pnpm run dev:vite` - Start Vite dev server only
-- `pnpm run dev:server` - Start backend server only
-- `pnpm run build` - Build frontend for production
-- `pnpm run start` - Start production server
-- `pnpm run typecheck` - Run TypeScript type checking
-- `pnpm run lint` - Run ESLint
-- `pnpm run lint:fix` - Fix ESLint errors
-- `pnpm run format` - Format code with Prettier
 
 ## Project Structure
 
@@ -98,3 +98,10 @@ shelly-toolbox/
 This project uses tRPC for end-to-end type safety. Types are automatically inferred from the backend router to the frontend - no manual type definitions needed!
 
 When you modify a procedure in `src/server/trpc.ts`, TypeScript will immediately show errors in client code if the usage doesn't match.
+
+## Manual Testing
+
+- Run `pnpm run dev` and open `http://localhost:3001` in a browser.
+- Verify that the initial list of Shelly devices appears.
+- Trigger device actions from the UI and confirm that the list updates in real time.
+- Check your browser DevTools Network/WebSocket tab to confirm a WebSocket connection to `/trpc` is established and stays connected.
