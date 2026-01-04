@@ -105,6 +105,7 @@ Do not make assumptions on important decisions — get clarification first.
 ---
 
 ### [ ] Step: Frontend Application Setup
+<!-- chat-id: dff712ff-f1a6-4f85-acdb-f7e2ccd94bfb -->
 
 Set up the React frontend with Vite, Mantine, and tRPC client.
 
