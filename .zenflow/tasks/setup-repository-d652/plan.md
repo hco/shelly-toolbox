@@ -47,19 +47,24 @@ Do not make assumptions on important decisions — get clarification first.
 
 ---
 
-### [ ] Step: Shared Schemas
+### [x] Step: Shared Schemas
+<!-- chat-id: 1a2ae3af-cbf7-4921-9b68-c2c7af8a11f0 -->
 
-Create shared Zod schemas and TypeScript types.
-
-**Tasks**:
-- Create `src/shared/types.ts` with Zod schemas (DeviceSchema, DeviceCommandSchema, etc.)
-- Export TypeScript types inferred from Zod schemas
-- Create `src/shared/constants.ts` with shared constants
+**Completed**: Shared Zod schemas and TypeScript types created successfully
+- Created `src/shared/types.ts` with Zod v4 schemas:
+  - DeviceCapabilitySchema with type enum and state
+  - DeviceSchema with IP validation (IPv4/IPv6), ISO datetime, and capabilities array
+  - DeviceCommandSchema with optional parameters record
+  - Exported inferred TypeScript types (Device, DeviceCapability, DeviceCommand)
+- Created `src/shared/constants.ts` with shared constants:
+  - Server ports (SERVER_PORT, VITE_DEV_PORT)
+  - Device types constants
+  - Timeout and interval settings
 
 **Verification**:
-- Files exist and export correct schemas and types
-- No TypeScript errors
-- Zod schemas validate correctly
+- ✅ Files exist and export correct schemas and types
+- ✅ TypeScript type checking passes without errors
+- ✅ Zod v4 schemas properly configured with union for IP addresses and ISO datetime
 
 **References**: See `spec.md` - Data Model / API / Interface Changes
 
