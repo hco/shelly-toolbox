@@ -18,8 +18,9 @@
 - **Frontend Framework**: React (latest)
 - **Frontend Build Tool**: Vite (latest)
 - **UI Library**: Mantine (latest - https://mantine.dev)
-- **WebSocket Communication**: Socket.io (latest) with TypeScript support
-- **Type Sharing**: Shared TypeScript definitions for frontend/backend
+- **Type-safe API**: tRPC (latest) with WebSocket subscriptions
+- **Validation**: Zod (latest) for runtime type validation
+- **Data Fetching**: @tanstack/react-query (required by tRPC React)
 
 **Note**: All dependencies will use `@latest` versions during installation.
 
@@ -29,17 +30,20 @@ Single package with organized source directories:
 shelly-toolbox/
 ├── src/
 │   ├── server/           # Node.js backend server
-│   │   ├── index.ts      # Server entry point
-│   │   ├── websocket.ts  # WebSocket server
+│   │   ├── index.ts      # Server entry point (Express + tRPC handlers)
+│   │   ├── trpc.ts       # tRPC router definition
+│   │   ├── context.ts    # tRPC context (optional)
 │   │   └── services/     # Business logic
 │   ├── client/           # React frontend
 │   │   ├── main.tsx      # React entry point
 │   │   ├── App.tsx       # Root component
 │   │   ├── components/   # React components
-│   │   └── hooks/        # Custom hooks
-│   └── shared/           # Shared types and utilities
-│       ├── types.ts      # Data models
-│       └── websocket.ts  # WebSocket event types
+│   │   ├── hooks/        # Custom hooks
+│   │   └── utils/        # Client utilities
+│   │       └── trpc.ts   # tRPC client setup
+│   └── shared/           # Shared types and schemas
+│       ├── types.ts      # Data models (Zod schemas)
+│       └── router.ts     # Exported AppRouter type
 ├── public/               # Static assets for frontend
 ├── index.html            # HTML entry point
 ├── package.json          # Single package.json
@@ -60,16 +64,20 @@ shelly-toolbox/
 - Configure ESLint and Prettier for consistent code quality
 - Install all dependencies using `pnpm add <package>@latest`
 
-### 2. Shared Types (`src/shared/`)
-- Define TypeScript interfaces for WebSocket messages
-- Create type-safe event schemas (request/response pairs)
-- Export shared utilities and constants
-- Types are imported directly with `@/shared/*` path aliases
+### 2. Shared Types & Schemas (`src/shared/`)
+- Define Zod schemas for data models (Device, etc.)
+- Export TypeScript types inferred from Zod schemas
+- No manual type syncing needed - tRPC infers types from router
 
 ### 3. Backend Server (`src/server/`)
 - Set up Node.js/TypeScript server with Express
-- Implement WebSocket server using Socket.io with type-safe handlers
-- Use shared types from `src/shared/`
+- Create tRPC router with:
+  - **Queries**: Read operations (getDevices, etc.)
+  - **Mutations**: Write operations (controlDevice, etc.)
+  - **Subscriptions**: Real-time updates (onDeviceUpdate, etc.)
+- Set up tRPC HTTP handler for queries/mutations
+- Set up tRPC WebSocket handler for subscriptions
+- Use Zod for input validation
 - **Serve frontend**: 
   - Production: Serve built frontend from `dist/` folder
   - Development: Proxy requests to Vite dev server (http://localhost:5173)
@@ -80,55 +88,99 @@ shelly-toolbox/
 ### 4. Frontend Application (`src/client/`)
 - Set up Vite with React and TypeScript
 - Install and configure Mantine UI library (latest version)
-- Set up WebSocket client with type-safe event handlers
+- Set up tRPC React client with React Query
+- Configure tRPC links:
+  - HTTP link for queries/mutations
+  - WebSocket link for subscriptions
 - Create basic application structure:
-  - App component with Mantine provider
-  - WebSocket connection management hook
-  - Example component demonstrating Shelly device management
+  - App component with Mantine provider and tRPC provider
+  - Example component using tRPC hooks
 - Configure Vite for development and production builds
-- Use shared types from `src/shared/`
+- Types are automatically inferred from backend router
 
-### 5. Type-Safe WebSocket Communication
-Strategy: Use Socket.io with TypeScript for bidirectional type safety
+### 5. Type-Safe Communication with tRPC
+Strategy: Use tRPC for end-to-end type safety without manual type definitions
 
-**Shared Types Structure**:
+**Shared Schemas**:
 ```typescript
-// src/shared/websocket.ts
-export interface ServerToClientEvents {
-  deviceStatus: (data: DeviceStatus) => void;
-  deviceList: (devices: Device[]) => void;
-}
+// src/shared/types.ts
+import { z } from 'zod';
 
-export interface ClientToServerEvents {
-  getDevices: () => void;
-  controlDevice: (deviceId: string, command: DeviceCommand) => void;
-}
+export const DeviceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  ipAddress: z.string(),
+  online: z.boolean(),
+  lastSeen: z.date(),
+});
 
-export interface Device {
-  id: string;
-  name: string;
-  type: string;
-  online: boolean;
-}
+export type Device = z.infer<typeof DeviceSchema>;
 
-// Additional interfaces...
+export const DeviceCommandSchema = z.object({
+  capability: z.string(),
+  action: z.string(),
+  parameters: z.record(z.unknown()).optional(),
+});
+
+export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 ```
 
-**Backend Implementation**:
+**Backend Router**:
 ```typescript
-import { Server } from 'socket.io';
-import type { ServerToClientEvents, ClientToServerEvents } from '@/shared/websocket';
+// src/server/trpc.ts
+import { initTRPC } from '@trpc/server';
+import { observable } from '@trpc/server/observable';
+import { z } from 'zod';
+import { DeviceCommandSchema } from '@/shared/types';
 
-const io = new Server<ClientToServerEvents, ServerToClientEvents>();
+const t = initTRPC.create();
+
+export const appRouter = t.router({
+  getDevices: t.procedure.query(async () => {
+    // Return devices - type automatically inferred
+    return shellyService.getDevices();
+  }),
+  
+  controlDevice: t.procedure
+    .input(z.object({
+      deviceId: z.string(),
+      command: DeviceCommandSchema,
+    }))
+    .mutation(async ({ input }) => {
+      return shellyService.controlDevice(input.deviceId, input.command);
+    }),
+  
+  onDeviceUpdate: t.procedure.subscription(() => {
+    return observable<Device>((emit) => {
+      const handler = (device: Device) => emit.next(device);
+      shellyService.on('deviceUpdate', handler);
+      return () => shellyService.off('deviceUpdate', handler);
+    });
+  }),
+});
+
+export type AppRouter = typeof appRouter;
 ```
 
-**Frontend Implementation**:
+**Frontend Client Setup**:
 ```typescript
-import { io, Socket } from 'socket.io-client';
-import type { ServerToClientEvents, ClientToServerEvents } from '@/shared/websocket';
+// src/client/utils/trpc.ts
+import { createTRPCReact } from '@trpc/react-query';
+import type { AppRouter } from '@/server/trpc';
 
-// Use relative URL - no hardcoded host/port, avoids CORS
-const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
+export const trpc = createTRPCReact<AppRouter>();
+```
+
+**Frontend Usage**:
+```typescript
+// In a React component - fully typed automatically!
+const devices = trpc.getDevices.useQuery();
+const controlDevice = trpc.controlDevice.useMutation();
+const deviceUpdates = trpc.onDeviceUpdate.useSubscription();
+
+// Call mutation
+controlDevice.mutate({ deviceId: '123', command: { ... } });
 ```
 
 ### 6. Development Tooling
@@ -155,21 +207,20 @@ const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
 - `index.html` - HTML entry point for Vite
 
 #### src/shared/
-- `types.ts` - Shared data model types (Device, etc.)
-- `websocket.ts` - WebSocket event type definitions
+- `types.ts` - Zod schemas and inferred TypeScript types
 - `constants.ts` - Shared constants
 
 #### src/server/
-- `index.ts` - Server entry point (Express + Socket.io + frontend serving/proxy)
-- `websocket.ts` - WebSocket server implementation
-- `services/shellyService.ts` - Shelly device management logic (stub)
-- `.env.example` - Environment variables template (if needed)
+- `index.ts` - Server entry point (Express + tRPC handlers + frontend serving/proxy)
+- `trpc.ts` - tRPC router definition with procedures and subscriptions
+- `context.ts` - tRPC context factory (optional, for auth/session later)
+- `services/shellyService.ts` - Shelly device management logic (stub with EventEmitter)
 
 #### src/client/
 - `main.tsx` - React application entry point
-- `App.tsx` - Root React component
-- `hooks/useWebSocket.ts` - WebSocket connection hook
-- `components/DeviceList.tsx` - Example component
+- `App.tsx` - Root React component with tRPC provider
+- `utils/trpc.ts` - tRPC client setup and configuration
+- `components/DeviceList.tsx` - Example component using tRPC hooks
 - `theme.ts` - Mantine theme configuration (optional)
 - `vite-env.d.ts` - Vite type declarations
 
@@ -180,42 +231,51 @@ const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
 
 ## Data Model / API / Interface Changes
 
-### WebSocket Events
+### tRPC Procedures
 
-#### Client → Server
-- `getDevices` - Request list of Shelly devices
+#### Queries (Read operations)
+- `getDevices` - Get list of all Shelly devices
+- `getDevice` - Get specific device by ID
+
+#### Mutations (Write operations)
 - `controlDevice` - Send command to specific device
 - `discoverDevices` - Trigger device discovery on local network
 
-#### Server → Client
-- `deviceList` - Send current device list
-- `deviceStatus` - Update status of specific device
-- `deviceDiscovered` - Notify about newly discovered device
-- `error` - Error notification
+#### Subscriptions (Real-time updates)
+- `onDeviceUpdate` - Subscribe to device status changes
+- `onDeviceDiscovered` - Subscribe to newly discovered devices
 
-### Device Model (Shared Type)
+### Device Model (Zod Schema)
 ```typescript
-interface Device {
-  id: string;
-  name: string;
-  type: string;
-  ipAddress: string;
-  online: boolean;
-  lastSeen: Date;
-  capabilities: DeviceCapability[];
-}
+// src/shared/types.ts
+import { z } from 'zod';
 
-interface DeviceCapability {
-  type: 'switch' | 'dimmer' | 'sensor' | 'meter';
-  id: string;
-  state: unknown;
-}
+export const DeviceCapabilitySchema = z.object({
+  type: z.enum(['switch', 'dimmer', 'sensor', 'meter']),
+  id: z.string(),
+  state: z.unknown(),
+});
 
-interface DeviceCommand {
-  capability: string;
-  action: string;
-  parameters?: Record<string, unknown>;
-}
+export const DeviceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  ipAddress: z.string().ip(),
+  online: z.boolean(),
+  lastSeen: z.date(),
+  capabilities: z.array(DeviceCapabilitySchema),
+});
+
+export const DeviceCommandSchema = z.object({
+  capability: z.string(),
+  action: z.string(),
+  parameters: z.record(z.unknown()).optional(),
+});
+
+// Inferred TypeScript types (automatically typed)
+export type Device = z.infer<typeof DeviceSchema>;
+export type DeviceCapability = z.infer<typeof DeviceCapabilitySchema>;
+export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 ```
 
 ---
@@ -245,21 +305,26 @@ interface DeviceCommand {
    - Open browser to localhost:3001
 
 3. **Type Safety**:
-   - Modify a WebSocket event signature in `src/shared/websocket.ts`
-   - Verify TypeScript errors appear in both `src/server/` and `src/client/`
-   - This confirms type sharing works correctly
+   - Modify a procedure in `src/server/trpc.ts` (change input/output type)
+   - Verify TypeScript errors appear immediately in client code
+   - This confirms end-to-end type inference works
 
-4. **WebSocket Communication**:
+4. **tRPC Communication**:
    - With both frontend and backend running, verify:
-     - WebSocket connection established (check browser console)
-     - Can send/receive test messages
-     - Type-safe event handlers work correctly
+     - Queries work (getDevices)
+     - Mutations work (controlDevice)
+     - Subscriptions establish WebSocket connection
+     - Real-time updates flow from server to client
+     - All operations are fully typed
 
 ### Manual Testing Checklist
 - [ ] Backend starts without errors
 - [ ] Frontend starts and displays Mantine UI
-- [ ] WebSocket connection establishes between frontend and backend
-- [ ] Type errors are caught when modifying shared types
+- [ ] tRPC queries return data successfully
+- [ ] tRPC mutations execute successfully
+- [ ] tRPC subscriptions establish WebSocket connection
+- [ ] Real-time updates flow from server to client
+- [ ] Type errors are caught when modifying router procedures
 - [ ] Linting passes
 - [ ] Build process completes successfully
 
@@ -268,7 +333,8 @@ interface DeviceCommand {
 ## Implementation Notes
 
 ### Technology Decisions
-- **Socket.io over native WebSocket**: Better browser compatibility, automatic reconnection, TypeScript support
+- **tRPC over Socket.io/REST**: End-to-end type safety without code generation, automatic type inference, no manual type syncing
+- **Zod for validation**: Runtime type validation, schemas as single source of truth
 - **Single package structure**: Simpler setup, direct imports, easier to start
 - **pnpm**: Faster, more efficient than npm, better disk space usage
 - **Latest versions**: All dependencies installed with `@latest` tag
@@ -277,6 +343,7 @@ interface DeviceCommand {
 - **Backend serves frontend**: No CORS issues, single origin, simpler deployment
   - Development: Backend proxies to Vite dev server
   - Production: Backend serves static files from `dist/`
+- **React Query**: Required by tRPC React, provides excellent data fetching/caching
 
 ### Future Considerations
 - Testing infrastructure (Vitest for unit tests, Playwright for E2E)
@@ -289,14 +356,16 @@ interface DeviceCommand {
 - Consider splitting into monorepo if complexity grows
 
 ### Potential Challenges
-- **Type synchronization**: Ensuring shared types stay in sync between frontend/backend
-  - **Mitigation**: TypeScript path aliases (`@/shared/*`), strict TypeScript checking
-- **WebSocket connection management**: Handling disconnections, reconnections
-  - **Mitigation**: Socket.io handles this automatically
+- **tRPC setup complexity**: Initial setup has more moving parts than REST
+  - **Mitigation**: Follow official tRPC docs carefully, use latest examples
+- **WebSocket subscriptions**: Requires separate WebSocket server setup
+  - **Mitigation**: tRPC provides `applyWSSHandler` for easy WebSocket integration
 - **Development workflow**: Running both Vite dev server and backend server
   - **Mitigation**: Use `concurrently` to run both with single command
 - **Proxy configuration**: Backend must correctly proxy to Vite in development
   - **Mitigation**: Use `http-proxy-middleware` for Express proxy setup
+- **Date serialization**: Dates need special handling in tRPC
+  - **Mitigation**: Use superjson transformer or serialize dates as ISO strings
 
 ---
 

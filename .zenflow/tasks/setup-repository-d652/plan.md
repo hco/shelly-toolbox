@@ -24,9 +24,9 @@ Do not make assumptions on important decisions — get clarification first.
 **Completed**: Technical specification created at `spec.md`
 - **Complexity Assessment**: Medium
 - **Approach**: Single package with organized `src/` directories (server, client, shared)
-- **Stack**: Node.js/TypeScript backend, React+Vite+Mantine frontend, Socket.io for WebSocket
+- **Stack**: Node.js/TypeScript backend, React+Vite+Mantine frontend, tRPC for type-safe API
 - **Package Manager**: pnpm with latest versions
-- **Type Safety**: Shared TypeScript types in `src/shared/` for frontend/backend communication
+- **Type Safety**: tRPC with end-to-end type inference, Zod for validation
 
 ---
 
@@ -48,18 +48,19 @@ Set up the basic repository structure and development tooling.
 
 ---
 
-### [ ] Step: Shared Types
+### [ ] Step: Shared Schemas
 
-Create shared TypeScript types for communication.
+Create shared Zod schemas and TypeScript types.
 
 **Tasks**:
-- Create `src/shared/websocket.ts` with event interfaces (ServerToClientEvents, ClientToServerEvents)
-- Create `src/shared/types.ts` with Device and related data models
+- Create `src/shared/types.ts` with Zod schemas (DeviceSchema, DeviceCommandSchema, etc.)
+- Export TypeScript types inferred from Zod schemas
 - Create `src/shared/constants.ts` with shared constants
 
 **Verification**:
-- Files exist and export correct types
+- Files exist and export correct schemas and types
 - No TypeScript errors
+- Zod schemas validate correctly
 
 **References**: See `spec.md` - Data Model / API / Interface Changes
 
@@ -67,15 +68,16 @@ Create shared TypeScript types for communication.
 
 ### [ ] Step: Backend Server Setup
 
-Set up the Node.js backend server with WebSocket support and frontend serving.
+Set up the Node.js backend server with tRPC router and frontend serving.
 
 **Tasks**:
-- Create `src/server/index.ts` - Express HTTP server + Socket.io setup
-- Add frontend serving logic:
-  - Production: Serve static files from `dist/` folder
-  - Development: Proxy to Vite dev server (http://localhost:5173) using `http-proxy-middleware`
-- Create `src/server/websocket.ts` - WebSocket event handlers using shared types
-- Create `src/server/services/shellyService.ts` - Stub service for device management
+- Create `src/server/trpc.ts` - tRPC router with queries, mutations, subscriptions
+- Create `src/server/context.ts` - tRPC context factory (can be minimal for now)
+- Create `src/server/index.ts` - Express HTTP server with:
+  - tRPC HTTP handler (for queries/mutations)
+  - tRPC WebSocket handler using `applyWSSHandler` (for subscriptions)
+  - Frontend serving (production) or proxy to Vite (development)
+- Create `src/server/services/shellyService.ts` - Stub service with EventEmitter
 - Configure development script (tsx or ts-node-dev) in package.json
 - Add `concurrently` to run both Vite and server with single `dev` command
 
@@ -83,9 +85,9 @@ Set up the Node.js backend server with WebSocket support and frontend serving.
 - `pnpm run dev:server` starts server without errors (port 3001)
 - `pnpm run dev` starts both Vite and server
 - Accessing localhost:3001 shows proxied Vite dev server
-- WebSocket server listens correctly
+- tRPC HTTP endpoint responds
+- tRPC WebSocket server listens correctly
 - No CORS errors in browser console
-- Type safety works (changing shared types causes errors)
 
 **References**: See `spec.md` - Implementation Approach section 3
 
@@ -93,48 +95,54 @@ Set up the Node.js backend server with WebSocket support and frontend serving.
 
 ### [ ] Step: Frontend Application Setup
 
-Set up the React frontend with Vite and Mantine.
+Set up the React frontend with Vite, Mantine, and tRPC client.
 
 **Tasks**:
 - Create `index.html` as Vite entry point
 - Create `vite.config.ts` with path aliases and configuration
-- Create `src/client/main.tsx` - React entry point
+- Create `src/client/utils/trpc.ts` - tRPC React client setup with:
+  - HTTP link for queries/mutations
+  - WebSocket link for subscriptions
+  - Split link to route between them
+- Create `src/client/main.tsx` - React entry point with QueryClientProvider and tRPC provider
 - Create `src/client/App.tsx` - Root component with Mantine provider
-- Create `src/client/hooks/useWebSocket.ts` - WebSocket connection hook
-- Create `src/client/components/DeviceList.tsx` - Example component
+- Create `src/client/components/DeviceList.tsx` - Example component using tRPC hooks
 - Configure Vite dev and build scripts in package.json
 
 **Verification**:
-- `pnpm run dev` or `pnpm run dev:client` starts Vite dev server
+- `pnpm run dev:vite` starts Vite dev server
 - Application renders in browser with Mantine UI
 - No TypeScript errors
 - Mantine theme applies correctly
+- tRPC client types are inferred from server router
 
 **References**: See `spec.md` - Implementation Approach section 4
 
 ---
 
-### [ ] Step: WebSocket Integration & Type Safety
+### [ ] Step: tRPC Integration & Type Safety Testing
 
-Integrate WebSocket communication between frontend and backend with full type safety.
+Integrate and test end-to-end type-safe communication with tRPC.
 
 **Tasks**:
-- Implement Socket.io server event handlers in `src/server/websocket.ts`
-- Implement Socket.io client connection in `src/client/hooks/useWebSocket.ts`
-- Test bidirectional communication with sample events
-- Add connection state management in frontend hook
-- Add error handling for WebSocket events
+- Test tRPC queries in DeviceList component (use `trpc.getDevices.useQuery()`)
+- Test tRPC mutations (use `trpc.controlDevice.useMutation()`)
+- Test tRPC subscriptions (use `trpc.onDeviceUpdate.useSubscription()`)
+- Verify type inference by modifying router procedure and seeing errors in client
+- Add error handling and loading states in components
+- Test that Shelly service EventEmitter triggers subscription updates
 
 **Verification**:
 - Start both with `pnpm run dev` (or separately: `pnpm run dev:vite` and `pnpm run dev:server`)
 - Access application at localhost:3001 (backend proxies to frontend)
-- WebSocket connection establishes (check browser console)
-- Can send test messages from frontend to backend
-- Backend can broadcast to connected clients
+- tRPC queries fetch data successfully
+- tRPC mutations execute successfully
+- tRPC subscriptions establish WebSocket connection and receive updates
 - No CORS errors
-- Modifying `src/shared/websocket.ts` causes TypeScript errors in both client and server
+- Modifying procedure types in `src/server/trpc.ts` causes immediate TypeScript errors in client
+- All tRPC operations are fully typed (autocomplete works)
 
-**References**: See `spec.md` - Type-Safe WebSocket Communication section
+**References**: See `spec.md` - Type-Safe Communication with tRPC section
 
 ---
 
