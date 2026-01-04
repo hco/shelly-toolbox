@@ -27,7 +27,7 @@ const getWsUrl = () => {
   return `ws://localhost:${SERVER_PORT}`;
 };
 
-const wsClient =
+export const wsClient =
   typeof window === 'undefined'
     ? null
     : createWSClient({
@@ -53,4 +53,3 @@ export const trpcClient = trpc.createClient({
     }),
   ],
 });
-

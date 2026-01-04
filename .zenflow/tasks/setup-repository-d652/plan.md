@@ -132,7 +132,8 @@ Set up the React frontend with Vite, Mantine, and tRPC client.
 
 ---
 
-### [ ] Step: tRPC Integration & Type Safety Testing
+### [x] Step: tRPC Integration & Type Safety Testing
+<!-- chat-id: 54d157cd-674c-48ba-82c9-620b0b6d8285 -->
 
 Integrate and test end-to-end type-safe communication with tRPC (subscription-first).
 
