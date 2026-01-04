@@ -115,7 +115,7 @@ export const DeviceSchema = z.object({
   type: z.string(),
   ipAddress: z.string(),
   online: z.boolean(),
-  lastSeen: z.date(),
+  lastSeen: z.string().datetime(), // ISO 8601 string for JSON serialization
 });
 
 export type Device = z.infer<typeof DeviceSchema>;
@@ -306,7 +306,7 @@ export const DeviceSchema = z.object({
   type: z.string(),
   ipAddress: z.string().ip(),
   online: z.boolean(),
-  lastSeen: z.date(),
+  lastSeen: z.string().datetime(), // ISO 8601 string for JSON serialization
   capabilities: z.array(DeviceCapabilitySchema),
 });
 
@@ -411,8 +411,8 @@ export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
   - **Mitigation**: Use `concurrently` to run both with single command
 - **Proxy configuration**: Backend must correctly proxy to Vite in development
   - **Mitigation**: Use `http-proxy-middleware` for Express proxy setup
-- **Date serialization**: Dates need special handling in tRPC
-  - **Mitigation**: Use superjson transformer or serialize dates as ISO strings
+- **Date handling**: JSON serialization doesn't preserve Date objects
+  - **Solution**: Use `z.string().datetime()` for ISO 8601 strings, convert to Date when needed on client
 
 ---
 
