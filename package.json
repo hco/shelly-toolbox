@@ -1,0 +1,51 @@
+{
+  "name": "shelly-toolbox",
+  "version": "0.1.0",
+  "description": "A tool for managing local Shelly devices",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:server\"",
+    "dev:vite": "vite",
+    "dev:server": "tsx watch src/server/index.ts",
+    "build": "tsc && vite build",
+    "build:server": "tsc",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\""
+  },
+  "dependencies": {
+    "@mantine/core": "latest",
+    "@mantine/hooks": "latest",
+    "@tanstack/react-query": "latest",
+    "@trpc/client": "latest",
+    "@trpc/react-query": "latest",
+    "@trpc/server": "latest",
+    "express": "latest",
+    "http-proxy-middleware": "^3.0.5",
+    "react": "latest",
+    "react-dom": "latest",
+    "ws": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/ws": "latest",
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "eslint": "latest",
+    "postcss": "latest",
+    "postcss-preset-mantine": "latest",
+    "postcss-simple-vars": "latest",
+    "prettier": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vite": "latest"
+  }
+}
