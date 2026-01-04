@@ -23,9 +23,10 @@ Do not make assumptions on important decisions — get clarification first.
 
 **Completed**: Technical specification created at `spec.md`
 - **Complexity Assessment**: Medium
-- **Approach**: Monorepo with workspaces (backend, frontend, shared)
+- **Approach**: Single package with organized `src/` directories (server, client, shared)
 - **Stack**: Node.js/TypeScript backend, React+Vite+Mantine frontend, Socket.io for WebSocket
-- **Type Safety**: Shared TypeScript types package for frontend/backend communication
+- **Package Manager**: pnpm with latest versions
+- **Type Safety**: Shared TypeScript types in `src/shared/` for frontend/backend communication
 
 ---
 
@@ -34,53 +35,50 @@ Do not make assumptions on important decisions — get clarification first.
 Set up the basic repository structure and development tooling.
 
 **Tasks**:
-- Create root `package.json` with workspace configuration
+- Create `package.json` with all dependencies (using `@latest`)
 - Set up comprehensive `.gitignore` for Node.js, TypeScript, build artifacts
-- Configure base `tsconfig.base.json` for all packages
-- Set up ESLint and Prettier configurations
+- Configure `tsconfig.json` with path aliases (`@/shared/*`, etc.)
+- Set up ESLint (flat config) and Prettier configurations
 - Create basic `README.md` with project overview
+- Create directory structure: `src/server/`, `src/client/`, `src/shared/`, `public/`
 
 **Verification**:
-- `npm install` completes successfully
+- `pnpm install` completes successfully
 - Directory structure matches spec
 
 ---
 
-### [ ] Step: Shared Types Package
+### [ ] Step: Shared Types
 
-Create the shared package for TypeScript types and utilities.
+Create shared TypeScript types for communication.
 
 **Tasks**:
-- Initialize `packages/shared` package
-- Define WebSocket event type interfaces (ServerToClientEvents, ClientToServerEvents)
-- Define Device and related data models
-- Configure TypeScript for dual compilation if needed
-- Export all types through main index
+- Create `src/shared/websocket.ts` with event interfaces (ServerToClientEvents, ClientToServerEvents)
+- Create `src/shared/types.ts` with Device and related data models
+- Create `src/shared/constants.ts` with shared constants
 
 **Verification**:
-- Package builds without TypeScript errors
-- Types are properly exported
+- Files exist and export correct types
+- No TypeScript errors
 
 **References**: See `spec.md` - Data Model / API / Interface Changes
 
 ---
 
-### [ ] Step: Backend Package Setup
+### [ ] Step: Backend Server Setup
 
 Set up the Node.js backend server with WebSocket support.
 
 **Tasks**:
-- Initialize `packages/backend` with TypeScript configuration
-- Install dependencies (express, socket.io, ts-node-dev, etc.)
-- Create HTTP server with Express
-- Set up Socket.io server with type-safe event handlers using shared types
-- Implement basic WebSocket handlers (getDevices, controlDevice stubs)
-- Create stub Shelly service for future device management
-- Configure development and build scripts
+- Create `src/server/index.ts` - Express HTTP server + Socket.io setup
+- Create `src/server/websocket.ts` - WebSocket event handlers using shared types
+- Create `src/server/services/shellyService.ts` - Stub service for device management
+- Configure development script (tsx or ts-node-dev) in package.json
+- Add server build script if needed
 
 **Verification**:
-- `npm run dev:backend` starts server without errors
-- WebSocket server listens on configured port
+- `pnpm run dev:server` starts server without errors
+- WebSocket server listens on configured port (e.g., 3001)
 - TypeScript compilation succeeds
 - Type safety works (changing shared types causes errors)
 
@@ -88,21 +86,21 @@ Set up the Node.js backend server with WebSocket support.
 
 ---
 
-### [ ] Step: Frontend Package Setup
+### [ ] Step: Frontend Application Setup
 
 Set up the React frontend with Vite and Mantine.
 
 **Tasks**:
-- Initialize `packages/frontend` with Vite React-TypeScript template
-- Install dependencies (react, mantine, socket.io-client, etc.)
-- Configure Mantine provider in App.tsx
-- Set up basic application structure
-- Create WebSocket connection hook using shared types
-- Implement example DeviceList component
-- Configure Vite for development and production
+- Create `index.html` as Vite entry point
+- Create `vite.config.ts` with path aliases and configuration
+- Create `src/client/main.tsx` - React entry point
+- Create `src/client/App.tsx` - Root component with Mantine provider
+- Create `src/client/hooks/useWebSocket.ts` - WebSocket connection hook
+- Create `src/client/components/DeviceList.tsx` - Example component
+- Configure Vite dev and build scripts in package.json
 
 **Verification**:
-- `npm run dev:frontend` starts Vite dev server
+- `pnpm run dev` or `pnpm run dev:client` starts Vite dev server
 - Application renders in browser with Mantine UI
 - No TypeScript errors
 - Mantine theme applies correctly
@@ -116,18 +114,18 @@ Set up the React frontend with Vite and Mantine.
 Integrate WebSocket communication between frontend and backend with full type safety.
 
 **Tasks**:
-- Verify Socket.io client connects to server
-- Implement type-safe event emitters/listeners on both sides
+- Implement Socket.io server event handlers in `src/server/websocket.ts`
+- Implement Socket.io client connection in `src/client/hooks/useWebSocket.ts`
 - Test bidirectional communication with sample events
-- Add connection state management in frontend
+- Add connection state management in frontend hook
 - Add error handling for WebSocket events
 
 **Verification**:
-- Start both frontend and backend
+- Start both frontend (`pnpm run dev`) and backend (`pnpm run dev:server`)
 - WebSocket connection establishes (check browser console)
 - Can send test messages from frontend to backend
 - Backend can broadcast to connected clients
-- Modifying shared types causes TypeScript errors in both packages
+- Modifying `src/shared/websocket.ts` causes TypeScript errors in both client and server
 
 **References**: See `spec.md` - Type-Safe WebSocket Communication section
 
@@ -138,16 +136,16 @@ Integrate WebSocket communication between frontend and backend with full type sa
 Ensure everything works together and documentation is complete.
 
 **Tasks**:
-- Run full build process (`npm run build`)
-- Run type checking across all packages (`npm run typecheck`)
-- Run linting (`npm run lint`)
-- Test complete workflow: start backend, start frontend, verify connection
+- Run full build process (`pnpm run build`)
+- Run type checking (`pnpm run typecheck`)
+- Run linting (`pnpm run lint`)
+- Test complete workflow: start server, start client, verify WebSocket connection
 - Update README.md with:
-  - Installation instructions
+  - Installation instructions (`pnpm install`)
   - Development workflow
-  - Build commands
+  - Available scripts
   - Project structure explanation
-- Create `.env.example` files where needed
+- Verify all dependencies are at latest versions
 
 **Verification**:
 - All build scripts succeed

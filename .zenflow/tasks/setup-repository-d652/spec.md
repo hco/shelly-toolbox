@@ -12,28 +12,41 @@
 ### Language & Runtime
 - **Backend**: Node.js (LTS) with TypeScript
 - **Frontend**: ReactJS with TypeScript
-- **Package Manager**: npm/pnpm (to be determined based on preference)
+- **Package Manager**: pnpm
 
-### Key Dependencies
-- **Frontend Framework**: React 18+
-- **Frontend Build Tool**: Vite
-- **UI Library**: Mantine (https://mantine.dev)
-- **WebSocket Communication**: Socket.io or similar with TypeScript support
+### Key Dependencies (Latest Versions)
+- **Frontend Framework**: React (latest)
+- **Frontend Build Tool**: Vite (latest)
+- **UI Library**: Mantine (latest - https://mantine.dev)
+- **WebSocket Communication**: Socket.io (latest) with TypeScript support
 - **Type Sharing**: Shared TypeScript definitions for frontend/backend
 
+**Note**: All dependencies will use `@latest` versions during installation.
+
 ### Project Structure
-Monorepo approach with workspaces:
+Single package with organized source directories:
 ```
 shelly-toolbox/
-├── packages/
-│   ├── backend/          # Node.js backend server
-│   ├── frontend/         # React+Vite frontend
-│   └── shared/           # Shared TypeScript types and utilities
-├── package.json          # Root package.json with workspace configuration
-├── tsconfig.base.json    # Base TypeScript configuration
+├── src/
+│   ├── server/           # Node.js backend server
+│   │   ├── index.ts      # Server entry point
+│   │   ├── websocket.ts  # WebSocket server
+│   │   └── services/     # Business logic
+│   ├── client/           # React frontend
+│   │   ├── main.tsx      # React entry point
+│   │   ├── App.tsx       # Root component
+│   │   ├── components/   # React components
+│   │   └── hooks/        # Custom hooks
+│   └── shared/           # Shared types and utilities
+│       ├── types.ts      # Data models
+│       └── websocket.ts  # WebSocket event types
+├── public/               # Static assets for frontend
+├── index.html            # HTML entry point
+├── package.json          # Single package.json
+├── tsconfig.json         # TypeScript configuration
+├── vite.config.ts        # Vite configuration
 ├── .gitignore
-├── README.md
-└── .eslintrc.js          # Shared linting configuration
+└── README.md
 ```
 
 ---
@@ -41,41 +54,42 @@ shelly-toolbox/
 ## Implementation Approach
 
 ### 1. Repository Foundation
-- Initialize root `package.json` with workspace configuration
+- Initialize `package.json` with all dependencies
 - Create comprehensive `.gitignore` for Node.js, TypeScript, and IDE files
-- Set up base TypeScript configuration (`tsconfig.base.json`)
+- Set up TypeScript configuration (`tsconfig.json`)
 - Configure ESLint and Prettier for consistent code quality
+- Install all dependencies using `pnpm add <package>@latest`
 
-### 2. Shared Package (`packages/shared`)
+### 2. Shared Types (`src/shared/`)
 - Define TypeScript interfaces for WebSocket messages
 - Create type-safe event schemas (request/response pairs)
 - Export shared utilities and constants
-- Configure for dual ESM/CJS output if needed
+- Types are imported directly with `@/shared/*` path aliases
 
-### 3. Backend Package (`packages/backend`)
-- Initialize Node.js/TypeScript server
-- Set up WebSocket server (Socket.io recommended for TypeScript support)
-- Implement type-safe WebSocket handlers using shared types
-- Configure build process (TypeScript compilation)
-- Add development scripts with hot-reload (ts-node-dev or tsx)
-- Set up basic logging framework
+### 3. Backend Server (`src/server/`)
+- Set up Node.js/TypeScript server with Express
+- Implement WebSocket server using Socket.io with type-safe handlers
+- Use shared types from `src/shared/`
+- Add development script with hot-reload (tsx or ts-node-dev)
+- Create stub Shelly service for device management
 
-### 4. Frontend Package (`packages/frontend`)
-- Initialize Vite project with React and TypeScript template
-- Install and configure Mantine UI library
+### 4. Frontend Application (`src/client/`)
+- Set up Vite with React and TypeScript
+- Install and configure Mantine UI library (latest version)
 - Set up WebSocket client with type-safe event handlers
 - Create basic application structure:
   - App component with Mantine provider
   - WebSocket connection management hook
   - Example component demonstrating Shelly device management
 - Configure Vite for development and production builds
+- Use shared types from `src/shared/`
 
 ### 5. Type-Safe WebSocket Communication
 Strategy: Use Socket.io with TypeScript for bidirectional type safety
 
 **Shared Types Structure**:
 ```typescript
-// packages/shared/src/websocket.ts
+// src/shared/websocket.ts
 export interface ServerToClientEvents {
   deviceStatus: (data: DeviceStatus) => void;
   deviceList: (devices: Device[]) => void;
@@ -99,7 +113,7 @@ export interface Device {
 **Backend Implementation**:
 ```typescript
 import { Server } from 'socket.io';
-import type { ServerToClientEvents, ClientToServerEvents } from '@shelly-toolbox/shared';
+import type { ServerToClientEvents, ClientToServerEvents } from '@/shared/websocket';
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>();
 ```
@@ -107,7 +121,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>();
 **Frontend Implementation**:
 ```typescript
 import { io, Socket } from 'socket.io-client';
-import type { ServerToClientEvents, ClientToServerEvents } from '@shelly-toolbox/shared';
+import type { ServerToClientEvents, ClientToServerEvents } from '@/shared/websocket';
 
 const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io('http://localhost:3001');
 ```
@@ -126,40 +140,36 @@ const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io('http://lo
 ### Files to Create
 
 #### Root Level
-- `package.json` - Workspace root configuration
-- `tsconfig.base.json` - Base TypeScript configuration
+- `package.json` - All dependencies and scripts
+- `tsconfig.json` - TypeScript configuration with path aliases
+- `vite.config.ts` - Vite configuration
 - `.gitignore` - Git ignore patterns
-- `.eslintrc.js` - ESLint configuration
+- `eslint.config.js` - ESLint configuration (flat config)
 - `.prettierrc` - Prettier configuration
 - `README.md` - Project documentation
+- `index.html` - HTML entry point for Vite
 
-#### packages/shared
-- `package.json` - Shared package configuration
-- `tsconfig.json` - TypeScript config extending base
-- `src/index.ts` - Main export file
-- `src/websocket.ts` - WebSocket type definitions
-- `src/types.ts` - Shared type definitions
-- `src/constants.ts` - Shared constants
+#### src/shared/
+- `types.ts` - Shared data model types (Device, etc.)
+- `websocket.ts` - WebSocket event type definitions
+- `constants.ts` - Shared constants
 
-#### packages/backend
-- `package.json` - Backend package configuration
-- `tsconfig.json` - TypeScript config extending base
-- `src/index.ts` - Server entry point
-- `src/server.ts` - Express/HTTP server setup
-- `src/websocket.ts` - WebSocket server implementation
-- `src/services/shellyService.ts` - Shelly device management logic (stub)
-- `.env.example` - Environment variables template
+#### src/server/
+- `index.ts` - Server entry point
+- `websocket.ts` - WebSocket server implementation
+- `services/shellyService.ts` - Shelly device management logic (stub)
+- `.env.example` - Environment variables template (if needed)
 
-#### packages/frontend
-- `package.json` - Frontend package configuration
-- `tsconfig.json` - TypeScript config for React
-- `vite.config.ts` - Vite configuration
-- `index.html` - HTML entry point
-- `src/main.tsx` - React application entry
-- `src/App.tsx` - Root React component
-- `src/hooks/useWebSocket.ts` - WebSocket connection hook
-- `src/components/DeviceList.tsx` - Example component
-- `src/theme.ts` - Mantine theme configuration
+#### src/client/
+- `main.tsx` - React application entry point
+- `App.tsx` - Root React component
+- `hooks/useWebSocket.ts` - WebSocket connection hook
+- `components/DeviceList.tsx` - Example component
+- `theme.ts` - Mantine theme configuration (optional)
+- `vite-env.d.ts` - Vite type declarations
+
+#### public/
+- (Empty or minimal static assets)
 
 ---
 
@@ -208,27 +218,27 @@ interface DeviceCommand {
 ## Verification Approach
 
 ### Setup Verification
-1. **Dependencies Installation**: Run `npm install` at root - should install all workspace dependencies
+1. **Dependencies Installation**: Run `pnpm install` - should install all dependencies
 2. **TypeScript Compilation**: 
-   - `npm run build` - Should compile all packages without errors
-   - `npm run typecheck` - TypeScript check across all packages
-3. **Linting**: `npm run lint` - Should pass without errors
+   - `pnpm run build` - Should compile server and build client
+   - `pnpm run typecheck` - TypeScript check across entire codebase
+3. **Linting**: `pnpm run lint` - Should pass without errors
 
 ### Functional Verification
 1. **Backend Server**:
-   - Start backend: `npm run dev:backend`
-   - Verify server starts on configured port
+   - Start backend: `pnpm run dev:server`
+   - Verify server starts on configured port (e.g., 3001)
    - Verify WebSocket server is listening
    
 2. **Frontend Application**:
-   - Start frontend: `npm run dev:frontend`
+   - Start frontend: `pnpm run dev` or `pnpm run dev:client`
    - Verify Vite dev server starts
    - Verify Mantine UI renders correctly
    - Open browser to localhost:5173 (default Vite port)
 
 3. **Type Safety**:
-   - Modify a WebSocket event signature in `packages/shared`
-   - Verify TypeScript errors appear in both frontend and backend
+   - Modify a WebSocket event signature in `src/shared/websocket.ts`
+   - Verify TypeScript errors appear in both `src/server/` and `src/client/`
    - This confirms type sharing works correctly
 
 4. **WebSocket Communication**:
@@ -242,7 +252,7 @@ interface DeviceCommand {
 - [ ] Frontend starts and displays Mantine UI
 - [ ] WebSocket connection establishes between frontend and backend
 - [ ] Type errors are caught when modifying shared types
-- [ ] Linting passes for all packages
+- [ ] Linting passes
 - [ ] Build process completes successfully
 
 ---
@@ -251,7 +261,9 @@ interface DeviceCommand {
 
 ### Technology Decisions
 - **Socket.io over native WebSocket**: Better browser compatibility, automatic reconnection, TypeScript support
-- **Monorepo with workspaces**: Easier type sharing, unified tooling, single repository
+- **Single package structure**: Simpler setup, direct imports, easier to start
+- **pnpm**: Faster, more efficient than npm, better disk space usage
+- **Latest versions**: All dependencies installed with `@latest` tag
 - **Mantine over Material-UI/Ant Design**: Modern, TypeScript-first, excellent documentation, active development
 - **Vite over Create React App**: Faster dev server, better build performance, modern tooling
 
@@ -263,21 +275,22 @@ interface DeviceCommand {
 - Authentication/authorization if needed
 - State management (Zustand/Redux if complexity grows)
 - API documentation (if REST API is added alongside WebSocket)
+- Consider splitting into monorepo if complexity grows
 
 ### Potential Challenges
 - **Type synchronization**: Ensuring shared types stay in sync between frontend/backend
-  - **Mitigation**: Use workspace dependencies, strict TypeScript checking
+  - **Mitigation**: TypeScript path aliases (`@/shared/*`), strict TypeScript checking
 - **WebSocket connection management**: Handling disconnections, reconnections
   - **Mitigation**: Socket.io handles this automatically
-- **Build complexity**: Managing multiple package builds
-  - **Mitigation**: Use workspace scripts, consider build tools like Turborepo if needed
+- **Build process**: Server needs separate build/run process from frontend
+  - **Mitigation**: Separate npm scripts for server and client development
 
 ---
 
 ## Success Criteria
 
 The repository setup is complete when:
-1. ✅ All packages compile without TypeScript errors
+1. ✅ All code compiles without TypeScript errors
 2. ✅ Backend server starts and WebSocket server is accessible
 3. ✅ Frontend application starts and renders Mantine UI components
 4. ✅ WebSocket connection establishes between frontend and backend
@@ -285,3 +298,4 @@ The repository setup is complete when:
 6. ✅ Linting and formatting configurations are in place
 7. ✅ README.md documents how to install, develop, and build the project
 8. ✅ `.gitignore` properly excludes generated files and dependencies
+9. ✅ All dependencies use latest versions
