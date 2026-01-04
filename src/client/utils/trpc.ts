@@ -31,7 +31,7 @@ export const wsClient =
   typeof window === 'undefined'
     ? null
     : createWSClient({
-        url: getWsUrl(),
+        url: `${getWsUrl()}/trpc`,
       });
 
 export const trpcClient = trpc.createClient({

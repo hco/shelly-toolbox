@@ -1,5 +1,6 @@
 import express from 'express';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
+import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { WebSocketServer } from 'ws';
 import { appRouter } from './trpc.js';
 import { createContext } from './context.js';
@@ -14,6 +15,14 @@ const app = express();
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+app.use(
+  '/trpc',
+  createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  })
+);
+
 if (isDev) {
   console.log('Development mode: Proxying to Vite dev server');
   const { createProxyMiddleware } = await import('http-proxy-middleware');
@@ -22,6 +31,7 @@ if (isDev) {
       target: `http://localhost:${VITE_DEV_PORT}`,
       changeOrigin: true,
       ws: true,
+      pathFilter: (pathname) => !pathname.startsWith('/trpc'),
     })
   );
 } else {
