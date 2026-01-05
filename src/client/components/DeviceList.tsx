@@ -12,7 +12,9 @@ import {
   Text,
   Title,
   Tooltip,
+  ActionIcon,
 } from '@mantine/core';
+import { IconLock } from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -57,8 +59,28 @@ export function DeviceList() {
   const [devices, setDevices] = useState<DevicesOutput>([] as DevicesOutput);
   const [hasInitialData, setHasInitialData] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settingPasswordFor, setSettingPasswordFor] = useState<string | null>(null);
 
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
+  const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
+  const { data: passwordData } = trpc.getShellyPassword.useQuery();
+
+  const handleSetDevicePassword = (deviceId: string) => {
+    setSettingPasswordFor(deviceId);
+    setError(null);
+    setDevicePasswordMutation.mutate(
+      { deviceId },
+      {
+        onSuccess() {
+          setSettingPasswordFor(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setSettingPasswordFor(null);
+        },
+      }
+    );
+  };
 
   trpc.onDevices.useSubscription(undefined, {
     onStarted() {
@@ -167,15 +189,37 @@ export function DeviceList() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Anchor
-                      href={`http://${device.ipAddress}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button size="xs" variant="light">
-                        Open
-                      </Button>
-                    </Anchor>
+                    <Group gap="xs">
+                      {device.authStatus === 'unprotected' && device.online && (
+                        <Tooltip
+                          label={
+                            passwordData?.hasPassword
+                              ? 'Set configured password on this device'
+                              : 'Configure a password in Settings first'
+                          }
+                        >
+                          <ActionIcon
+                            variant="filled"
+                            color="orange"
+                            size="sm"
+                            onClick={() => handleSetDevicePassword(device.id)}
+                            loading={settingPasswordFor === device.id}
+                            disabled={!passwordData?.hasPassword}
+                          >
+                            <IconLock size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                      <Anchor
+                        href={`http://${device.ipAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Button size="xs" variant="light">
+                          Open
+                        </Button>
+                      </Anchor>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}

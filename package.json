@@ -18,6 +18,7 @@
   "dependencies": {
     "@mantine/core": "latest",
     "@mantine/hooks": "latest",
+    "@tabler/icons-react": "^3.36.1",
     "@tanstack/react-query": "latest",
     "@tanstack/react-router": "^1.144.0",
     "@tanstack/react-router-devtools": "^1.144.0",

@@ -25,6 +25,17 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  setDevicePassword: t.procedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ input }) => {
+      const password = configService.getShellyPassword();
+      if (!password) {
+        throw new Error('No password configured. Please set a password in Settings first.');
+      }
+      await shellyService.setDevicePassword(input.deviceId, password);
+      return { success: true };
+    }),
+
   controlDevice: t.procedure
     .input(
       z.object({

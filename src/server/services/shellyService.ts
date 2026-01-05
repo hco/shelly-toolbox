@@ -321,6 +321,149 @@ class ShellyService extends EventEmitter {
     mdnsDiscovery.restart();
     return { discovered: this.devices.size };
   }
+
+  async setDevicePassword(deviceId: string, password: string): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    if (device.authStatus !== 'unprotected') {
+      throw new Error(`Device ${device.name} is already protected or status unknown`);
+    }
+
+    console.log(`[Auth] Setting password for ${device.name} (Gen${device.gen})`);
+
+    if (device.gen === 2) {
+      await this.setGen2Password(device, password);
+    } else {
+      await this.setGen1Password(device, password);
+    }
+
+    // Re-fetch auth status to confirm the password was set
+    await this.fetchAuthStatus(device);
+  }
+
+  private async setGen2Password(device: Device, password: string): Promise<void> {
+    // Gen2+ uses Shelly.SetAuth RPC method
+    // First, fetch device info to get the correct realm (auth_domain or id)
+    const deviceInfo = await this.fetchGen2DeviceInfo(device.ipAddress);
+    if (!deviceInfo) {
+      throw new Error(`Could not fetch device info for ${device.name}`);
+    }
+
+    // The realm is the full device ID like "shellyplus1pm-a8032abc1234"
+    const username = 'admin';
+    const realm = deviceInfo.id;
+    const ha1 = createHash('sha256')
+      .update(`${username}:${realm}:${password}`)
+      .digest('hex');
+
+    console.log(`[Auth] Setting password with realm="${realm}" for ${device.name}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(`http://${device.ipAddress}/rpc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 1,
+          method: 'Shelly.SetAuth',
+          params: { user: username, realm, ha1 },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set password: ${response.status} ${text}`);
+      }
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(`Shelly.SetAuth failed: ${result.error.message || JSON.stringify(result.error)}`);
+      }
+
+      console.log(`[Auth] Successfully set password for Gen2+ device ${device.name}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting password for ${device.name}`);
+      }
+      throw err;
+    }
+  }
+
+  private async fetchGen2DeviceInfo(ipAddress: string): Promise<{ id: string } | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/shelly`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      // The /shelly endpoint returns { id: "shellyplus1pm-a8032abc1234", ... }
+      if (typeof data.id === 'string') {
+        return { id: data.id };
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async setGen1Password(device: Device, password: string): Promise<void> {
+    // Gen1 uses /settings/login endpoint
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const params = new URLSearchParams({
+        enabled: '1',
+        username: 'admin',
+        password: password,
+      });
+
+      const response = await fetch(
+        `http://${device.ipAddress}/settings/login?${params.toString()}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set password: ${response.status} ${text}`);
+      }
+
+      const result = await response.json();
+      if (result.enabled !== true) {
+        throw new Error('Password was not enabled on device');
+      }
+
+      console.log(`[Auth] Successfully set password for Gen1 device ${device.name}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting password for ${device.name}`);
+      }
+      throw err;
+    }
+  }
 }
 
 export const shellyService = new ShellyService();
