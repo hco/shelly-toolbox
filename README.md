@@ -2,6 +2,18 @@
 
 A TypeScript-based tool for managing local Shelly smart home devices with a modern React frontend.
 
+## Features
+
+- **Device Discovery**: Automatically discovers Shelly devices on your local network via mDNS
+- **WiFi Provisioning**: Detect and configure factory-default Shelly devices to join your WiFi network
+  - Auto-detection of unprovisioned devices via WiFi scanning
+  - Automated setup workflow (connects to device AP, configures WiFi, sets password, reconnects)
+  - Real-time provisioning status with automatic retry logic
+  - Supports both Gen1 and Gen2 Shelly devices
+- **Device Management**: Control and monitor your Shelly devices from a web interface
+- **Password Protection**: Configure and apply passwords to unprotected devices
+- **Real-time Updates**: WebSocket-based subscriptions for live device status updates
+
 ## Tech Stack
 
 - **Backend**: Node.js + TypeScript + Express + tRPC
@@ -111,19 +123,23 @@ docker pull ghcr.io/hco/shelly-toolbox:latest
 
 ### Running the Container
 
-**Recommended: Host networking** (required for mDNS device discovery):
+**Recommended: Host networking with WiFi provisioning** (required for mDNS discovery and WiFi provisioning):
 
 ```bash
 docker run -d \
   --name shelly-toolbox \
   --network host \
+  --cap-add=NET_ADMIN \
+  -v /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket \
   -v shelly-data:/app/data \
   ghcr.io/hco/shelly-toolbox:latest
 ```
 
 Access the application at http://localhost:3001
 
-**Alternative: Port mapping** (mDNS discovery won't work):
+**Note**: WiFi provisioning requires access to the host's NetworkManager via D-Bus and NET_ADMIN capability. If you don't need provisioning, you can omit `--cap-add=NET_ADMIN` and the D-Bus socket mount.
+
+**Alternative: Port mapping only** (mDNS discovery and WiFi provisioning won't work):
 
 ```bash
 docker run -d \
@@ -137,7 +153,12 @@ docker run -d \
 
 ```bash
 docker build -t shelly-toolbox .
-docker run -d --network host -v shelly-data:/app/data shelly-toolbox
+docker run -d \
+  --network host \
+  --cap-add=NET_ADMIN \
+  -v /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket \
+  -v shelly-data:/app/data \
+  shelly-toolbox
 ```
 
 ### Data Persistence
@@ -150,3 +171,8 @@ The container stores configuration in `/app/data`. Mount a volume to persist set
 - Verify that the initial list of Shelly devices appears.
 - Trigger device actions from the UI and confirm that the list updates in real time.
 - Check your browser DevTools Network/WebSocket tab to confirm a WebSocket connection to `/trpc` is established and stays connected.
+- (Optional) Test WiFi provisioning:
+  - Configure a target WiFi network in Settings
+  - Place a Shelly device in factory-default mode (unprovisioned)
+  - Verify it appears in the "Unprovisioned Devices" section
+  - Click "Provision" to automatically configure the device
