@@ -276,12 +276,9 @@ class ShellyService extends EventEmitter {
       );
       clearTimeout(timeout);
 
-      if (initialResponse.ok) {
-        // No auth required or already authenticated
-        return 'correct_password';
-      }
-
       if (initialResponse.status !== 401) {
+        // Expected 401 to get auth challenge, but got something else
+        console.log(`[Auth] Gen2 password test: expected 401, got ${initialResponse.status}`);
         return 'different_password';
       }
 
