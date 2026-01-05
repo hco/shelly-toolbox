@@ -3,7 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
 import { trpc, trpcClient } from '@/client/utils/trpc.js';
 import { routeTree } from '@/client/routeTree.gen.js';
 
@@ -28,6 +30,7 @@ ReactDOM.createRoot(rootElement).render(
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <MantineProvider>
+          <Notifications position="top-right" />
           <RouterProvider router={router} />
         </MantineProvider>
       </QueryClientProvider>

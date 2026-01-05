@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import type { ProvisioningWifi } from '@/shared/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '../../../data');
@@ -8,10 +9,12 @@ const CONFIG_FILE = join(DATA_DIR, 'config.json');
 
 interface Config {
   shellyPassword: string | null;
+  provisioningWifi: ProvisioningWifi | null;
 }
 
 const DEFAULT_CONFIG: Config = {
   shellyPassword: null,
+  provisioningWifi: null,
 };
 
 class ConfigService {
@@ -50,6 +53,15 @@ class ConfigService {
 
   setShellyPassword(password: string | null): void {
     this.config.shellyPassword = password;
+    this.saveConfig();
+  }
+
+  getProvisioningWifi(): ProvisioningWifi | null {
+    return this.config.provisioningWifi;
+  }
+
+  setProvisioningWifi(wifi: ProvisioningWifi | null): void {
+    this.config.provisioningWifi = wifi;
     this.saveConfig();
   }
 }

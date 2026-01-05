@@ -7,6 +7,8 @@ import { createContext } from './context.js';
 import { SERVER_PORT, VITE_DEV_PORT } from '@/shared/constants.js';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { shellyService } from './services/shellyService.js';
+import { wifiConnectionService } from './services/wifiConnectionService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +16,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+// Parse CLI flags and environment variables
+const autoProvisionEnabled =
+  process.env.SHELLY_AUTO_PROVISION === 'true' ||
+  process.argv.includes('--auto-provision');
+
+if (autoProvisionEnabled) {
+  console.log('Auto-provisioning mode enabled');
+}
 
 app.use(
   '/trpc',
@@ -69,8 +80,26 @@ server.on('upgrade', (request, socket, head) => {
 
 console.log(`WebSocket server is running`);
 
+// Initialize auto-provisioning if enabled
+if (autoProvisionEnabled) {
+  (async () => {
+    // Initialize WiFi connection service first
+    await wifiConnectionService.initialize();
+
+    // Enable auto-provisioning (starts WiFi scanning)
+    const enabled = await shellyService.enableAutoProvisioning();
+    if (!enabled) {
+      console.warn(
+        'Auto-provisioning could not be enabled. ' +
+        'This feature requires Linux with NetworkManager.'
+      );
+    }
+  })();
+}
+
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
+  shellyService.disableAutoProvisioning();
   wss.close();
   server.close();
 });

@@ -1,16 +1,101 @@
 import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
-import type { Device, DeviceCommand, AuthStatus } from '@/shared/types.js';
+import type { Device, DeviceCommand, AuthStatus, UnprovisionedDevice } from '@/shared/types.js';
 import { mdnsDiscovery, type MdnsDevice } from './mdnsDiscovery.js';
 import { configService } from './configService.js';
+import { wifiScanService, type ShellyAccessPoint } from './wifiScanService.js';
 
 class ShellyService extends EventEmitter {
   private devices: Map<string, Device> = new Map();
+  private unprovisionedDevices: Map<string, UnprovisionedDevice> = new Map();
+  private autoProvisioningEnabled = false;
 
   constructor() {
     super();
     this.setupMdnsListeners();
     mdnsDiscovery.start();
+  }
+
+  async enableAutoProvisioning(): Promise<boolean> {
+    if (this.autoProvisioningEnabled) {
+      return true;
+    }
+
+    const initialized = await wifiScanService.initialize();
+    if (!initialized) {
+      console.log('[ShellyService] Auto-provisioning not available (WiFi scanning unavailable)');
+      return false;
+    }
+
+    this.setupWifiScanListeners();
+    await wifiScanService.startScanning();
+    this.autoProvisioningEnabled = true;
+    console.log('[ShellyService] Auto-provisioning enabled');
+    return true;
+  }
+
+  disableAutoProvisioning(): void {
+    if (!this.autoProvisioningEnabled) {
+      return;
+    }
+
+    wifiScanService.stopScanning();
+    this.unprovisionedDevices.clear();
+    this.autoProvisioningEnabled = false;
+    this.emit('unprovisionedDevicesChanged');
+    console.log('[ShellyService] Auto-provisioning disabled');
+  }
+
+  isAutoProvisioningEnabled(): boolean {
+    return this.autoProvisioningEnabled;
+  }
+
+  private setupWifiScanListeners(): void {
+    wifiScanService.on('shellyAPFound', (ap: ShellyAccessPoint) => {
+      // Check if this device is already known (by MAC address)
+      if (this.isDeviceAlreadyKnown(ap.macAddress)) {
+        console.log(`[ShellyService] Shelly AP ${ap.ssid} matches known device, ignoring`);
+        return;
+      }
+
+      const device = wifiScanService.toUnprovisionedDevice(ap);
+      this.unprovisionedDevices.set(ap.ssid, device);
+      this.emit('unprovisionedDeviceFound', device);
+      this.emit('unprovisionedDevicesChanged');
+      console.log(`[ShellyService] Found unprovisioned device: ${ap.ssid}`);
+    });
+
+    wifiScanService.on('shellyAPLost', (ap: ShellyAccessPoint) => {
+      if (this.unprovisionedDevices.has(ap.ssid)) {
+        this.unprovisionedDevices.delete(ap.ssid);
+        this.emit('unprovisionedDeviceLost', ap);
+        this.emit('unprovisionedDevicesChanged');
+        console.log(`[ShellyService] Lost unprovisioned device: ${ap.ssid}`);
+      }
+    });
+  }
+
+  private isDeviceAlreadyKnown(macAddress: string): boolean {
+    // Check if any known device has a matching MAC address (case insensitive)
+    const normalizedMac = macAddress.toUpperCase();
+    for (const device of this.devices.values()) {
+      // Device ID often contains the MAC address
+      if (device.id.toUpperCase().includes(normalizedMac)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getUnprovisionedDevices(): UnprovisionedDevice[] {
+    return Array.from(this.unprovisionedDevices.values());
+  }
+
+  removeUnprovisionedDevice(ssid: string): void {
+    if (this.unprovisionedDevices.has(ssid)) {
+      this.unprovisionedDevices.delete(ssid);
+      this.emit('unprovisionedDevicesChanged');
+    }
   }
 
   private setupMdnsListeners(): void {

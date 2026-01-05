@@ -2,10 +2,15 @@ import { initTRPC } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
 import type { Context } from './context.js';
-import { DeviceCommandSchema } from '@/shared/types.js';
+import {
+  DeviceCommandSchema,
+  ProvisioningWifiSchema,
+} from '@/shared/types.js';
 import { shellyService } from './services/shellyService.js';
 import { configService } from './services/configService.js';
-import type { Device } from '@/shared/types.js';
+import { notificationService } from './services/notificationService.js';
+import { provisioningService } from './services/provisioningService.js';
+import type { Device, UnprovisionedDevice, Notification } from '@/shared/types.js';
 
 const t = initTRPC.context<Context>().create();
 
@@ -84,6 +89,77 @@ export const appRouter = t.router({
       return () => shellyService.off('deviceDiscovered', handler);
     });
   }),
+
+  // Provisioning WiFi configuration
+  getProvisioningWifi: t.procedure.query(() => {
+    const wifi = configService.getProvisioningWifi();
+    return wifi ? { ssid: wifi.ssid, hasPassword: true } : null;
+  }),
+
+  setProvisioningWifi: t.procedure
+    .input(z.object({ wifi: ProvisioningWifiSchema.nullable() }))
+    .mutation(({ input }) => {
+      configService.setProvisioningWifi(input.wifi);
+      return { success: true };
+    }),
+
+  // Auto-provisioning status
+  getAutoProvisioningStatus: t.procedure.query(() => {
+    return {
+      enabled: shellyService.isAutoProvisioningEnabled(),
+      isProvisioning: provisioningService.isProvisioning(),
+      currentStatus: provisioningService.getCurrentStatus(),
+    };
+  }),
+
+  // Unprovisioned devices
+  onUnprovisionedDevices: t.procedure.subscription(() => {
+    return observable<UnprovisionedDevice[]>((emit) => {
+      emit.next(shellyService.getUnprovisionedDevices());
+
+      const handler = () => emit.next(shellyService.getUnprovisionedDevices());
+      shellyService.on('unprovisionedDevicesChanged', handler);
+
+      return () => shellyService.off('unprovisionedDevicesChanged', handler);
+    });
+  }),
+
+  // Provision a device
+  provisionDevice: t.procedure
+    .input(z.object({ ssid: z.string() }))
+    .mutation(async ({ input }) => {
+      const devices = shellyService.getUnprovisionedDevices();
+      const device = devices.find((d) => d.ssid === input.ssid);
+
+      if (!device) {
+        throw new Error(`Unprovisioned device with SSID "${input.ssid}" not found`);
+      }
+
+      const success = await provisioningService.provisionDevice(device);
+
+      if (success) {
+        // Remove from unprovisioned list
+        shellyService.removeUnprovisionedDevice(input.ssid);
+      }
+
+      return { success };
+    }),
+
+  // Notifications
+  onNotifications: t.procedure.subscription(() => {
+    return observable<Notification>((emit) => {
+      const handler = (notification: Notification) => emit.next(notification);
+      notificationService.on('notification', handler);
+
+      return () => notificationService.off('notification', handler);
+    });
+  }),
+
+  getRecentNotifications: t.procedure
+    .input(z.object({ limit: z.number().optional() }).optional())
+    .query(({ input }) => {
+      return notificationService.getRecent(input?.limit);
+    }),
 });
 
 export type AppRouter = typeof appRouter;

@@ -7,6 +7,7 @@ import {
   Center,
   Group,
   Loader,
+  Progress,
   Stack,
   Table,
   Text,
@@ -14,11 +15,11 @@ import {
   Tooltip,
   ActionIcon,
 } from '@mantine/core';
-import { IconLock } from '@tabler/icons-react';
+import { IconLock, IconWifi } from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
-import type { AuthStatus } from '@/shared/types.js';
+import type { AuthStatus, UnprovisionedDevice } from '@/shared/types.js';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DevicesOutput = RouterOutputs['onDevices'];
@@ -60,10 +61,22 @@ export function DeviceList() {
   const [hasInitialData, setHasInitialData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingPasswordFor, setSettingPasswordFor] = useState<string | null>(null);
+  const [unprovisionedDevices, setUnprovisionedDevices] = useState<UnprovisionedDevice[]>([]);
+  const [provisioningDevice, setProvisioningDevice] = useState<string | null>(null);
 
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
+  const provisionDeviceMutation = trpc.provisionDevice.useMutation();
   const { data: passwordData } = trpc.getShellyPassword.useQuery();
+  const { data: autoProvisioningStatus } = trpc.getAutoProvisioningStatus.useQuery();
+  const { data: provisioningWifi } = trpc.getProvisioningWifi.useQuery();
+
+  // Subscribe to unprovisioned devices
+  trpc.onUnprovisionedDevices.useSubscription(undefined, {
+    onData(data) {
+      setUnprovisionedDevices(data);
+    },
+  });
 
   const handleSetDevicePassword = (deviceId: string) => {
     setSettingPasswordFor(deviceId);
@@ -102,6 +115,23 @@ export function DeviceList() {
         setError(err.message);
       },
     });
+  };
+
+  const handleProvisionDevice = (ssid: string) => {
+    setProvisioningDevice(ssid);
+    setError(null);
+    provisionDeviceMutation.mutate(
+      { ssid },
+      {
+        onSuccess() {
+          setProvisioningDevice(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setProvisioningDevice(null);
+        },
+      }
+    );
   };
 
   const isInitialLoading =
@@ -226,6 +256,105 @@ export function DeviceList() {
             </Table.Tbody>
           </Table>
         </Card>
+      )}
+
+      {/* Unprovisioned Devices Section */}
+      {autoProvisioningStatus?.enabled && unprovisionedDevices.length > 0 && (
+        <>
+          <Group justify="space-between" mt="lg">
+            <div>
+              <Title order={3}>Unprovisioned Devices</Title>
+              <Text c="dimmed" size="sm">
+                Factory-default Shelly devices detected via WiFi. Configure them to join your network.
+              </Text>
+            </div>
+          </Group>
+
+          <Card withBorder radius="sm">
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>SSID</Table.Th>
+                  <Table.Th>Generation</Table.Th>
+                  <Table.Th>Signal</Table.Th>
+                  <Table.Th>First seen</Table.Th>
+                  <Table.Th>Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {unprovisionedDevices.map((device) => (
+                  <Table.Tr key={device.ssid}>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <IconWifi size={16} />
+                        <Text fw={500}>{device.ssid}</Text>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge color="blue" variant="light">
+                        Gen{device.gen}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Progress
+                          value={device.signalStrength}
+                          size="sm"
+                          w={60}
+                          color={
+                            device.signalStrength > 70
+                              ? 'green'
+                              : device.signalStrength > 40
+                              ? 'yellow'
+                              : 'red'
+                          }
+                        />
+                        <Text size="xs" c="dimmed">
+                          {device.signalStrength}%
+                        </Text>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">
+                        {new Date(device.firstSeen).toLocaleString()}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip
+                        label={
+                          provisioningWifi
+                            ? `Configure to join "${provisioningWifi.ssid}"`
+                            : 'Configure target WiFi in Settings first'
+                        }
+                      >
+                        <Button
+                          size="xs"
+                          color="blue"
+                          onClick={() => handleProvisionDevice(device.ssid)}
+                          loading={provisioningDevice === device.ssid}
+                          disabled={!provisioningWifi || autoProvisioningStatus?.isProvisioning}
+                        >
+                          Provision
+                        </Button>
+                      </Tooltip>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Card>
+
+          {autoProvisioningStatus?.isProvisioning && autoProvisioningStatus.currentStatus && (
+            <Card withBorder padding="sm" radius="sm" bg="blue.0">
+              <Group gap="sm">
+                <Loader size="sm" />
+                <Text size="sm">
+                  {autoProvisioningStatus.currentStatus.step}
+                </Text>
+              </Group>
+            </Card>
+          )}
+        </>
       )}
     </Stack>
   );

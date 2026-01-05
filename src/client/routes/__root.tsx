@@ -9,6 +9,7 @@ import {
 } from '@mantine/core';
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import { useConnectionStatus } from '@/client/hooks/useConnectionStatus.js';
+import { NotificationListener } from '@/client/components/NotificationToast.js';
 
 function RootLayout() {
   const connectionStatus = useConnectionStatus();
@@ -29,6 +30,7 @@ function RootLayout() {
 
   return (
     <AppShell header={{ height: 60 }}>
+      <NotificationListener />
       <AppShell.Header>
         <Container size="lg">
           <Group h={60} justify="space-between">

@@ -36,3 +36,51 @@ export const DeviceCommandSchema = z.object({
 export type Device = z.infer<typeof DeviceSchema>;
 export type DeviceCapability = z.infer<typeof DeviceCapabilitySchema>;
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
+
+// Unprovisioned device (factory default Shelly broadcasting AP)
+export const UnprovisionedDeviceSchema = z.object({
+  ssid: z.string(),
+  macAddress: z.string(),
+  gen: z.union([z.literal(1), z.literal(2)]),
+  signalStrength: z.number(),
+  firstSeen: z.iso.datetime(),
+});
+
+export type UnprovisionedDevice = z.infer<typeof UnprovisionedDeviceSchema>;
+
+// Notification system
+export const NotificationTypeSchema = z.enum(['info', 'success', 'warning', 'error']);
+
+export const NotificationSchema = z.object({
+  id: z.string(),
+  type: NotificationTypeSchema,
+  title: z.string(),
+  message: z.string(),
+  timestamp: z.iso.datetime(),
+  context: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type NotificationType = z.infer<typeof NotificationTypeSchema>;
+export type Notification = z.infer<typeof NotificationSchema>;
+
+// Provisioning WiFi config
+export const ProvisioningWifiSchema = z.object({
+  ssid: z.string(),
+  password: z.string(),
+});
+
+export type ProvisioningWifi = z.infer<typeof ProvisioningWifiSchema>;
+
+// Provisioning status for tracking active provisioning
+export const ProvisioningStatusSchema = z.enum([
+  'idle',
+  'connecting_to_ap',
+  'configuring_wifi',
+  'setting_password',
+  'reconnecting',
+  'waiting_for_device',
+  'success',
+  'failed',
+]);
+
+export type ProvisioningStatus = z.infer<typeof ProvisioningStatusSchema>;
