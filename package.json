@@ -7,7 +7,7 @@
     "dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:server\"",
     "dev:vite": "vite",
     "dev:server": "tsx watch src/server/index.ts",
-    "build": "tsc && vite build",
+    "build": "tsr generate && tsc && vite build",
     "build:server": "tsc",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit",
@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "latest",
+    "@tanstack/router-cli": "^1.145.4",
     "@tanstack/router-plugin": "^1.145.4",
     "@types/express": "latest",
     "@types/node": "latest",

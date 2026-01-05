@@ -39,14 +39,14 @@ function RootLayout() {
               <Tabs defaultValue="/" variant="subtle">
                 <Tabs.List>
                   <Link to="/" style={{ textDecoration: 'none' }}>
-                    {({ isActive }) => (
+                    {({ isActive }: { isActive: boolean }) => (
                       <Tabs.Tab value="/" data-active={isActive || undefined}>
                         Devices
                       </Tabs.Tab>
                     )}
                   </Link>
                   <Link to="/settings" style={{ textDecoration: 'none' }}>
-                    {({ isActive }) => (
+                    {({ isActive }: { isActive: boolean }) => (
                       <Tabs.Tab
                         value="/settings"
                         data-active={isActive || undefined}

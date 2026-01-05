@@ -3,4 +3,4 @@ import { Settings } from '@/client/components/Settings.js';
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
-});
+} as any);

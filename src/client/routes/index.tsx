@@ -3,4 +3,4 @@ import { DeviceList } from '@/client/components/DeviceList.js';
 
 export const Route = createFileRoute('/')({
   component: DeviceList,
-});
+} as any);
