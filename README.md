@@ -99,6 +99,51 @@ This project uses tRPC for end-to-end type safety. Types are automatically infer
 
 When you modify a procedure in `src/server/trpc.ts`, TypeScript will immediately show errors in client code if the usage doesn't match.
 
+## Docker
+
+### Pre-built Image
+
+Pull the pre-built multi-architecture image (supports amd64 and arm64):
+
+```bash
+docker pull ghcr.io/hco/shelly-toolbox:latest
+```
+
+### Running the Container
+
+**Recommended: Host networking** (required for mDNS device discovery):
+
+```bash
+docker run -d \
+  --name shelly-toolbox \
+  --network host \
+  -v shelly-data:/app/data \
+  ghcr.io/hco/shelly-toolbox:latest
+```
+
+Access the application at http://localhost:3001
+
+**Alternative: Port mapping** (mDNS discovery won't work):
+
+```bash
+docker run -d \
+  --name shelly-toolbox \
+  -p 3001:3001 \
+  -v shelly-data:/app/data \
+  ghcr.io/hco/shelly-toolbox:latest
+```
+
+### Building Locally
+
+```bash
+docker build -t shelly-toolbox .
+docker run -d --network host -v shelly-data:/app/data shelly-toolbox
+```
+
+### Data Persistence
+
+The container stores configuration in `/app/data`. Mount a volume to persist settings across container restarts.
+
 ## Manual Testing
 
 - Run `pnpm run dev` and open `http://localhost:3001` in a browser.

@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output (rebuilt in container)
+dist/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Local data (mounted as volume)
+data/
+
+# Environment files
+.env
+.env.*
+
+# Thoughts/notes
+thoughts/
+
+# OS files
+.DS_Store
+Thumbs.db
