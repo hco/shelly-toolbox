@@ -6,13 +6,16 @@ import {
   Group,
   Tabs,
   Title,
+  Text,
 } from '@mantine/core';
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import { useConnectionStatus } from '@/client/hooks/useConnectionStatus.js';
 import { NotificationListener } from '@/client/components/NotificationToast.js';
+import { trpc } from '@/client/utils/trpc.js';
 
 function RootLayout() {
   const connectionStatus = useConnectionStatus();
+  const versionQuery = trpc.getVersion.useQuery();
 
   const connectionColor =
     connectionStatus === 'connected'
@@ -29,7 +32,7 @@ function RootLayout() {
         : 'Disconnected';
 
   return (
-    <AppShell header={{ height: 60 }}>
+    <AppShell header={{ height: 60 }} footer={{ height: 40 }}>
       <NotificationListener />
       <AppShell.Header>
         <Container size="lg">
@@ -69,6 +72,15 @@ function RootLayout() {
           <Outlet />
         </Container>
       </AppShell.Main>
+      <AppShell.Footer>
+        <Container size="lg">
+          <Group h={40} justify="center">
+            <Text size="xs" c="dimmed">
+              Version: {versionQuery.data?.version || 'loading...'}
+            </Text>
+          </Group>
+        </Container>
+      </AppShell.Footer>
       {import.meta.env.DEV && <TanStackRouterDevtools />}
     </AppShell>
   );

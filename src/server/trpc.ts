@@ -1,6 +1,9 @@
 import { initTRPC } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import type { Context } from './context.js';
 import {
   DeviceCommandSchema,
@@ -14,7 +17,23 @@ import type { Device, UnprovisionedDevice, Notification } from '@/shared/types.j
 
 const t = initTRPC.context<Context>().create();
 
+// Get version from version.txt file (created during Docker build)
+let appVersion = 'dev';
+try {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const versionPath = join(__dirname, '../../version.txt');
+  appVersion = readFileSync(versionPath, 'utf-8').trim();
+} catch {
+  // In development, use git command or default to 'dev'
+  appVersion = 'dev';
+}
+
 export const appRouter = t.router({
+  // Version info
+  getVersion: t.procedure.query(() => {
+    return { version: appVersion };
+  }),
   // Password configuration
   getShellyPassword: t.procedure.query(() => {
     const password = configService.getShellyPassword();
