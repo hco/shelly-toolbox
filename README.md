@@ -27,6 +27,18 @@ A TypeScript-based tool for managing local Shelly smart home devices with a mode
 - Node.js (LTS version)
 - pnpm (`npm install -g pnpm`)
 
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SHELLY_AUTO_PROVISION` | Enable WiFi provisioning feature (requires Linux with NetworkManager) | `false` |
+
+To enable WiFi provisioning:
+
+```bash
+SHELLY_AUTO_PROVISION=true pnpm run dev
+```
+
 ## Installation
 
 ```bash
@@ -130,6 +142,7 @@ docker run -d \
   --name shelly-toolbox \
   --network host \
   --cap-add=NET_ADMIN \
+  -e SHELLY_AUTO_PROVISION=true \
   -v /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket \
   -v shelly-data:/app/data \
   ghcr.io/hco/shelly-toolbox:latest
@@ -156,6 +169,7 @@ docker build -t shelly-toolbox .
 docker run -d \
   --network host \
   --cap-add=NET_ADMIN \
+  -e SHELLY_AUTO_PROVISION=true \
   -v /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket \
   -v shelly-data:/app/data \
   shelly-toolbox
@@ -171,7 +185,8 @@ The container stores configuration in `/app/data`. Mount a volume to persist set
 - Verify that the initial list of Shelly devices appears.
 - Trigger device actions from the UI and confirm that the list updates in real time.
 - Check your browser DevTools Network/WebSocket tab to confirm a WebSocket connection to `/trpc` is established and stays connected.
-- (Optional) Test WiFi provisioning:
+- (Optional) Test WiFi provisioning (Linux only):
+  - Start with `SHELLY_AUTO_PROVISION=true pnpm run dev`
   - Configure a target WiFi network in Settings
   - Place a Shelly device in factory-default mode (unprovisioned)
   - Verify it appears in the "Unprovisioned Devices" section
