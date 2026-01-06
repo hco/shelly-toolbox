@@ -211,13 +211,137 @@ class ShellyService extends EventEmitter {
         this.emit('deviceUpdate', existingDevice);
         this.emit('devicesChanged');
 
-        // If we can authenticate, fetch WiFi AP config
+        // If we can authenticate, fetch device name and WiFi AP config in parallel
         if (authStatus === 'correct_password') {
-          await this.fetchWifiApConfig(existingDevice);
+          await Promise.all([
+            this.fetchDeviceName(existingDevice),
+            this.fetchWifiApConfig(existingDevice)
+          ]);
         }
       }
     } catch (err) {
       console.error(`[Auth] Failed to fetch auth status for device ${device.id}:`, err);
+    }
+  }
+
+  private async fetchDeviceName(device: Device): Promise<void> {
+    const password = configService.getShellyPassword();
+    if (!password) return;
+
+    try {
+      console.log(`[Device Name] Fetching device name for ${device.name} (${device.ipAddress})`);
+      let deviceName: string | null = null;
+
+      if (device.gen === 2) {
+        deviceName = await this.fetchGen2DeviceName(device.ipAddress, password);
+      } else {
+        deviceName = await this.fetchGen1DeviceName(device.ipAddress, password);
+      }
+
+      if (deviceName && deviceName !== device.name) {
+        console.log(`[Device Name] Updating device name from "${device.name}" to "${deviceName}"`);
+        device.name = deviceName;
+        this.emit('deviceUpdate', device);
+        this.emit('devicesChanged');
+      } else if (deviceName) {
+        console.log(`[Device Name] Device name "${deviceName}" matches current name`);
+      }
+    } catch (err) {
+      console.error(`[Device Name] Failed to fetch device name for ${device.name}:`, err);
+    }
+  }
+
+  private async fetchGen2DeviceName(
+    ipAddress: string,
+    password: string
+  ): Promise<string | null> {
+    // Gen2 uses Shelly.GetDeviceInfo RPC with digest auth
+    const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/Shelly.GetDeviceInfo');
+    if (!authHeader) {
+      // Fallback: try /shelly endpoint which might be accessible
+      return this.fetchDeviceNameFromShellyEndpoint(ipAddress);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/rpc/Shelly.GetDeviceInfo`, {
+        signal: controller.signal,
+        headers: { Authorization: authHeader },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return this.fetchDeviceNameFromShellyEndpoint(ipAddress);
+      }
+
+      const data = await response.json();
+      // Response structure: { name: "Kitchen Light", id: "...", ... }
+      if (typeof data.name === 'string' && data.name.length > 0) {
+        return data.name;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async fetchGen1DeviceName(
+    ipAddress: string,
+    password: string
+  ): Promise<string | null> {
+    // Gen1 uses /settings with basic auth
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const credentials = Buffer.from(`admin:${password}`).toString('base64');
+      const response = await fetch(`http://${ipAddress}/settings`, {
+        signal: controller.signal,
+        headers: { Authorization: `Basic ${credentials}` },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return this.fetchDeviceNameFromShellyEndpoint(ipAddress);
+      }
+
+      const data = await response.json();
+      // Response structure: { name: "Kitchen Light", device: {...}, ... }
+      if (typeof data.name === 'string' && data.name.length > 0) {
+        return data.name;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async fetchDeviceNameFromShellyEndpoint(ipAddress: string): Promise<string | null> {
+    // Fallback: try /shelly endpoint which is often accessible without auth
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/shelly`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // The /shelly endpoint might have name in different places
+      if (typeof data.name === 'string' && data.name.length > 0) {
+        return data.name;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
     }
   }
 
@@ -925,6 +1049,7 @@ class ShellyService extends EventEmitter {
     uri: string
   ): Promise<string | null> {
     // Get auth challenge with POST method
+    // Use WiFi.GetConfig which always requires authentication
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
@@ -932,12 +1057,15 @@ class ShellyService extends EventEmitter {
       const initialResponse = await fetch(`http://${ipAddress}${uri}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 1, method: 'Shelly.GetDeviceInfo' }),
+        body: JSON.stringify({ id: 1, method: 'WiFi.GetConfig' }),
         signal: controller.signal,
       });
       clearTimeout(timeout);
 
-      if (initialResponse.status !== 401) return null;
+      if (initialResponse.status !== 401) {
+        console.log(`[Auth] getGen2PostAuthHeader: expected 401, got ${initialResponse.status}`);
+        return null;
+      }
 
       const wwwAuth = initialResponse.headers.get('WWW-Authenticate');
       if (!wwwAuth) return null;
