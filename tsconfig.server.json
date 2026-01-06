@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "moduleResolution": "node",
+    "module": "ESNext",
+    "allowImportingTsExtensions": false,
+    "declaration": false,
+    "paths": {
+      "@/server/*": ["./src/server/*"],
+      "@/client/*": ["./src/client/*"],
+      "@/shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": ["src/server/**/*", "src/shared/**/*"],
+  "exclude": ["node_modules", "dist", "src/client"]
+}
