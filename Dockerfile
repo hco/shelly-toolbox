@@ -1,9 +1,11 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
-# Install git and pnpm
-RUN apk add --no-cache git && \
-    corepack enable && corepack prepare pnpm@latest --activate
+# Accept version as build argument
+ARG APP_VERSION=unknown
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
@@ -13,15 +15,12 @@ COPY package.json pnpm-lock.yaml ./
 # Install all dependencies (including dev dependencies for build)
 RUN pnpm install --frozen-lockfile
 
-# Copy source code and .git directory for version info
+# Copy source code
 COPY tsconfig.json tsconfig.server.json vite.config.ts index.html tsr.config.json ./
 COPY src/ ./src/
-COPY .git/ ./.git/
 
-# Capture version info (git tag or commit hash)
-RUN git describe --tags --always > version.txt 2>/dev/null || \
-    git rev-parse --short HEAD > version.txt 2>/dev/null || \
-    echo "unknown" > version.txt
+# Write version info from build argument
+RUN echo "$APP_VERSION" > version.txt
 
 # Build the application (TypeScript compile + Vite build)
 RUN pnpm run build
