@@ -125,6 +125,22 @@ When you modify a procedure in `src/server/trpc.ts`, TypeScript will immediately
 
 ## Docker
 
+### Quick Start with Docker Compose (Recommended for Linux)
+
+One-liner to fetch and start with host networking and WiFi provisioning:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hco/shelly-toolbox/main/docker-compose.yml -o docker-compose.yml && docker compose up -d
+```
+
+Access the application at http://localhost:3001
+
+This configuration includes:
+- Host networking for mDNS device discovery
+- WiFi provisioning enabled (SHELLY_AUTO_PROVISION=true)
+- Persistent data storage
+- Automatic restart on system reboot
+
 ### Pre-built Image
 
 Pull the pre-built multi-architecture image (supports amd64 and arm64):
