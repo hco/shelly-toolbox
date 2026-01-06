@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Shelly Toolbox is a TypeScript full-stack application for managing local Shelly smart home devices. It combines a React frontend with a Node.js/Express backend, using tRPC for end-to-end type-safe RPC.
 
+## Workflow
+
+**IMPORTANT**: Always use `/commit` to create a git commit after finishing any task (feature implementation, bug fix, refactoring, etc.).
+
 ## Commands
 
 ```bash
