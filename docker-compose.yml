@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   shelly-toolbox:
     image: ghcr.io/hco/shelly-toolbox:latest
