@@ -406,39 +406,48 @@ class ShellyService extends EventEmitter {
 
   private async testGen2Password(ipAddress: string, password: string): Promise<AuthStatus> {
     // Gen2 uses Digest authentication with SHA256
+    // We need to test the password by making an authenticated request.
+    // Some Gen2 devices allow unauthenticated access to Shelly.GetDeviceInfo,
+    // so we use WiFi.GetConfig which always requires auth.
+    const uri = '/rpc/WiFi.GetConfig';
+
     // First, make a request to get the auth challenge
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     try {
       const initialResponse = await fetch(
-        `http://${ipAddress}/rpc/Shelly.GetDeviceInfo`,
+        `http://${ipAddress}${uri}`,
         { signal: controller.signal }
       );
       clearTimeout(timeout);
 
+      console.log(`[Auth] Gen2 password test for ${ipAddress}: initial response ${initialResponse.status}`);
+
+      // If we don't get a 401, the endpoint might not require auth or something is wrong
+      // In this case, we can't verify the password, so return different_password
       if (initialResponse.status !== 401) {
-        // Expected 401 to get auth challenge, but got something else
-        console.log(`[Auth] Gen2 password test: expected 401, got ${initialResponse.status}`);
+        console.log(`[Auth] Gen2 password test: expected 401 for ${uri}, got ${initialResponse.status}`);
         return 'different_password';
       }
 
       // Parse WWW-Authenticate header for digest auth
       const wwwAuth = initialResponse.headers.get('WWW-Authenticate');
       if (!wwwAuth) {
+        console.log('[Auth] Gen2 password test: no WWW-Authenticate header');
         return 'different_password';
       }
 
       const nonceMatch = wwwAuth.match(/nonce="([^"]+)"/);
       const realmMatch = wwwAuth.match(/realm="([^"]+)"/);
       if (!nonceMatch || !realmMatch) {
+        console.log('[Auth] Gen2 password test: failed to parse nonce/realm');
         return 'different_password';
       }
 
       const nonce = nonceMatch[1];
       const realm = realmMatch[1];
       const username = 'admin';
-      const uri = '/rpc/Shelly.GetDeviceInfo';
       const nc = '00000001';
       const cnonce = Math.random().toString(36).substring(2, 10);
 
@@ -460,7 +469,7 @@ class ShellyService extends EventEmitter {
       const timeout2 = setTimeout(() => controller2.abort(), 5000);
 
       const authResponse = await fetch(
-        `http://${ipAddress}/rpc/Shelly.GetDeviceInfo`,
+        `http://${ipAddress}${uri}`,
         {
           signal: controller2.signal,
           headers: { Authorization: authHeader },
@@ -468,11 +477,17 @@ class ShellyService extends EventEmitter {
       );
       clearTimeout(timeout2);
 
+      console.log(`[Auth] Gen2 password test: authenticated request returned ${authResponse.status}`);
+
       if (authResponse.ok) {
+        console.log(`[Auth] Gen2 password test: SUCCESS for ${ipAddress}`);
         return 'correct_password';
       }
+
+      console.log(`[Auth] Gen2 password test: FAILED for ${ipAddress} - wrong password`);
       return 'different_password';
-    } catch {
+    } catch (err) {
+      console.error(`[Auth] Gen2 password test exception for ${ipAddress}:`, err);
       return 'different_password';
     }
   }
