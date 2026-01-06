@@ -210,9 +210,150 @@ class ShellyService extends EventEmitter {
         existingDevice.gen = detectedGen;
         this.emit('deviceUpdate', existingDevice);
         this.emit('devicesChanged');
+
+        // If we can authenticate, fetch WiFi AP config
+        if (authStatus === 'correct_password') {
+          await this.fetchWifiApConfig(existingDevice);
+        }
       }
     } catch (err) {
       console.error(`[Auth] Failed to fetch auth status for device ${device.id}:`, err);
+    }
+  }
+
+  private async fetchWifiApConfig(device: Device): Promise<void> {
+    const password = configService.getShellyPassword();
+    if (!password) return;
+
+    try {
+      console.log(`[WiFi AP] Fetching AP config for ${device.name}`);
+      let apConfig: { enabled: boolean; isOpen: boolean } | null = null;
+
+      if (device.gen === 2) {
+        apConfig = await this.fetchGen2WifiApConfig(device.ipAddress, password);
+      } else {
+        apConfig = await this.fetchGen1WifiApConfig(device.ipAddress, password);
+      }
+
+      if (apConfig) {
+        device.apEnabled = apConfig.enabled;
+        device.apIsOpen = apConfig.isOpen;
+        console.log(`[WiFi AP] ${device.name}: enabled=${apConfig.enabled}, isOpen=${apConfig.isOpen}`);
+        this.emit('deviceUpdate', device);
+        this.emit('devicesChanged');
+      }
+    } catch (err) {
+      console.error(`[WiFi AP] Failed to fetch AP config for ${device.name}:`, err);
+    }
+  }
+
+  private async fetchGen2WifiApConfig(
+    ipAddress: string,
+    password: string
+  ): Promise<{ enabled: boolean; isOpen: boolean } | null> {
+    // Gen2 uses WiFi.GetConfig RPC with digest auth
+    const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/WiFi.GetConfig');
+    if (!authHeader) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/rpc/WiFi.GetConfig`, {
+        signal: controller.signal,
+        headers: { Authorization: authHeader },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // Response structure: { ap: { ssid, is_open, enable, ... }, sta: {...}, ... }
+      if (data.ap) {
+        return {
+          enabled: data.ap.enable === true,
+          isOpen: data.ap.is_open === true,
+        };
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async fetchGen1WifiApConfig(
+    ipAddress: string,
+    password: string
+  ): Promise<{ enabled: boolean; isOpen: boolean } | null> {
+    // Gen1 uses /settings/ap with basic auth
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const credentials = Buffer.from(`admin:${password}`).toString('base64');
+      const response = await fetch(`http://${ipAddress}/settings/ap`, {
+        signal: controller.signal,
+        headers: { Authorization: `Basic ${credentials}` },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // Response structure: { enabled, ssid, key }
+      return {
+        enabled: data.enabled === true,
+        isOpen: !data.key || data.key === '',
+      };
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async getGen2AuthHeader(
+    ipAddress: string,
+    password: string,
+    uri: string
+  ): Promise<string | null> {
+    // Get auth challenge
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const initialResponse = await fetch(`http://${ipAddress}${uri}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (initialResponse.status !== 401) return null;
+
+      const wwwAuth = initialResponse.headers.get('WWW-Authenticate');
+      if (!wwwAuth) return null;
+
+      const nonceMatch = wwwAuth.match(/nonce="([^"]+)"/);
+      const realmMatch = wwwAuth.match(/realm="([^"]+)"/);
+      if (!nonceMatch || !realmMatch) return null;
+
+      const nonce = nonceMatch[1];
+      const realm = realmMatch[1];
+      const username = 'admin';
+      const nc = '00000001';
+      const cnonce = Math.random().toString(36).substring(2, 10);
+
+      const ha1 = createHash('sha256')
+        .update(`${username}:${realm}:${password}`)
+        .digest('hex');
+      const ha2 = createHash('sha256').update(`GET:${uri}`).digest('hex');
+      const digestResponse = createHash('sha256')
+        .update(`${ha1}:${nonce}:${nc}:${cnonce}:auth:${ha2}`)
+        .digest('hex');
+
+      return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", nc=${nc}, cnonce="${cnonce}", qop=auth, response="${digestResponse}", algorithm=SHA-256`;
+    } catch {
+      clearTimeout(timeout);
+      return null;
     }
   }
 
@@ -544,6 +685,270 @@ class ShellyService extends EventEmitter {
         throw new Error(`Timeout setting password for ${device.name}`);
       }
       throw err;
+    }
+  }
+
+  async setWifiApEnabled(deviceId: string, enabled: boolean): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    if (device.authStatus !== 'correct_password') {
+      throw new Error(`Cannot manage WiFi AP: device ${device.name} is not authenticated`);
+    }
+
+    const password = configService.getShellyPassword();
+    if (!password) {
+      throw new Error('No password configured');
+    }
+
+    console.log(`[WiFi AP] Setting AP enabled=${enabled} for ${device.name}`);
+
+    if (device.gen === 2) {
+      await this.setGen2WifiApEnabled(device, password, enabled);
+    } else {
+      await this.setGen1WifiApEnabled(device, password, enabled);
+    }
+
+    // Refresh AP config
+    await this.fetchWifiApConfig(device);
+  }
+
+  private async setGen2WifiApEnabled(device: Device, password: string, enabled: boolean): Promise<void> {
+    // Gen2 uses WiFi.SetConfig RPC with digest auth (POST method)
+    const authHeader = await this.getGen2PostAuthHeader(device.ipAddress, password, '/rpc');
+    if (!authHeader) {
+      throw new Error('Failed to authenticate with device');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(`http://${device.ipAddress}/rpc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          id: 1,
+          method: 'WiFi.SetConfig',
+          params: { config: { ap: { enable: enabled } } },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set WiFi AP: ${response.status} ${text}`);
+      }
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(`WiFi.SetConfig failed: ${result.error.message || JSON.stringify(result.error)}`);
+      }
+
+      console.log(`[WiFi AP] Successfully set AP enabled=${enabled} for Gen2 device ${device.name}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting WiFi AP for ${device.name}`);
+      }
+      throw err;
+    }
+  }
+
+  private async setGen1WifiApEnabled(device: Device, password: string, enabled: boolean): Promise<void> {
+    // Gen1 uses /settings/ap endpoint with basic auth
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const credentials = Buffer.from(`admin:${password}`).toString('base64');
+      const response = await fetch(
+        `http://${device.ipAddress}/settings/ap?enabled=${enabled ? '1' : '0'}`,
+        {
+          signal: controller.signal,
+          headers: { Authorization: `Basic ${credentials}` },
+        }
+      );
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set WiFi AP: ${response.status} ${text}`);
+      }
+
+      console.log(`[WiFi AP] Successfully set AP enabled=${enabled} for Gen1 device ${device.name}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting WiFi AP for ${device.name}`);
+      }
+      throw err;
+    }
+  }
+
+  async setWifiApPassword(deviceId: string): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    if (device.authStatus !== 'correct_password') {
+      throw new Error(`Cannot manage WiFi AP: device ${device.name} is not authenticated`);
+    }
+
+    const password = configService.getShellyPassword();
+    if (!password) {
+      throw new Error('No password configured');
+    }
+
+    console.log(`[WiFi AP] Setting AP password for ${device.name}`);
+
+    if (device.gen === 2) {
+      await this.setGen2WifiApPassword(device, password);
+    } else {
+      await this.setGen1WifiApPassword(device, password);
+    }
+
+    // Refresh AP config
+    await this.fetchWifiApConfig(device);
+  }
+
+  private async setGen2WifiApPassword(device: Device, password: string): Promise<void> {
+    // Gen2 uses WiFi.SetConfig RPC with digest auth (POST method)
+    const authHeader = await this.getGen2PostAuthHeader(device.ipAddress, password, '/rpc');
+    if (!authHeader) {
+      throw new Error('Failed to authenticate with device');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(`http://${device.ipAddress}/rpc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          id: 1,
+          method: 'WiFi.SetConfig',
+          params: { config: { ap: { pass: password } } },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set WiFi AP password: ${response.status} ${text}`);
+      }
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(`WiFi.SetConfig failed: ${result.error.message || JSON.stringify(result.error)}`);
+      }
+
+      console.log(`[WiFi AP] Successfully set AP password for Gen2 device ${device.name}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting WiFi AP password for ${device.name}`);
+      }
+      throw err;
+    }
+  }
+
+  private async setGen1WifiApPassword(device: Device, password: string): Promise<void> {
+    // Gen1 uses /settings/ap endpoint with basic auth
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const credentials = Buffer.from(`admin:${password}`).toString('base64');
+      const response = await fetch(
+        `http://${device.ipAddress}/settings/ap?key=${encodeURIComponent(password)}`,
+        {
+          signal: controller.signal,
+          headers: { Authorization: `Basic ${credentials}` },
+        }
+      );
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set WiFi AP password: ${response.status} ${text}`);
+      }
+
+      console.log(`[WiFi AP] Successfully set AP password for Gen1 device ${device.name}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting WiFi AP password for ${device.name}`);
+      }
+      throw err;
+    }
+  }
+
+  private async getGen2PostAuthHeader(
+    ipAddress: string,
+    password: string,
+    uri: string
+  ): Promise<string | null> {
+    // Get auth challenge with POST method
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const initialResponse = await fetch(`http://${ipAddress}${uri}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 1, method: 'Shelly.GetDeviceInfo' }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (initialResponse.status !== 401) return null;
+
+      const wwwAuth = initialResponse.headers.get('WWW-Authenticate');
+      if (!wwwAuth) return null;
+
+      const nonceMatch = wwwAuth.match(/nonce="([^"]+)"/);
+      const realmMatch = wwwAuth.match(/realm="([^"]+)"/);
+      if (!nonceMatch || !realmMatch) return null;
+
+      const nonce = nonceMatch[1];
+      const realm = realmMatch[1];
+      const username = 'admin';
+      const nc = '00000001';
+      const cnonce = Math.random().toString(36).substring(2, 10);
+
+      const ha1 = createHash('sha256')
+        .update(`${username}:${realm}:${password}`)
+        .digest('hex');
+      const ha2 = createHash('sha256').update(`POST:${uri}`).digest('hex');
+      const digestResponse = createHash('sha256')
+        .update(`${ha1}:${nonce}:${nc}:${cnonce}:auth:${ha2}`)
+        .digest('hex');
+
+      return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", nc=${nc}, cnonce="${cnonce}", qop=auth, response="${digestResponse}", algorithm=SHA-256`;
+    } catch {
+      clearTimeout(timeout);
+      return null;
     }
   }
 }

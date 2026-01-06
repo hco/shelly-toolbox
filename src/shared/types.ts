@@ -23,6 +23,9 @@ export const DeviceSchema = z.object({
   capabilities: z.array(DeviceCapabilitySchema),
   gen: z.union([z.literal(1), z.literal(2)]),
   authStatus: AuthStatusSchema,
+  // WiFi AP configuration (only available for authenticated devices)
+  apEnabled: z.boolean().optional(),
+  apIsOpen: z.boolean().optional(),
 });
 
 export type AuthStatus = z.infer<typeof AuthStatusSchema>;

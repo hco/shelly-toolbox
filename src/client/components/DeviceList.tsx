@@ -15,7 +15,7 @@ import {
   Tooltip,
   ActionIcon,
 } from '@mantine/core';
-import { IconLock, IconWifi } from '@tabler/icons-react';
+import { IconLock, IconWifi, IconWifiOff, IconKey } from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -64,9 +64,14 @@ export function DeviceList() {
   const [unprovisionedDevices, setUnprovisionedDevices] = useState<UnprovisionedDevice[]>([]);
   const [provisioningDevice, setProvisioningDevice] = useState<string | null>(null);
 
+  const [togglingApFor, setTogglingApFor] = useState<string | null>(null);
+  const [settingApPasswordFor, setSettingApPasswordFor] = useState<string | null>(null);
+
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
   const provisionDeviceMutation = trpc.provisionDevice.useMutation();
+  const setWifiApEnabledMutation = trpc.setWifiApEnabled.useMutation();
+  const setWifiApPasswordMutation = trpc.setWifiApPassword.useMutation();
   const { data: passwordData } = trpc.getShellyPassword.useQuery();
   const { data: autoProvisioningStatus } = trpc.getAutoProvisioningStatus.useQuery();
   const { data: provisioningWifi } = trpc.getProvisioningWifi.useQuery();
@@ -134,6 +139,40 @@ export function DeviceList() {
     );
   };
 
+  const handleToggleWifiAp = (deviceId: string, currentEnabled: boolean) => {
+    setTogglingApFor(deviceId);
+    setError(null);
+    setWifiApEnabledMutation.mutate(
+      { deviceId, enabled: !currentEnabled },
+      {
+        onSuccess() {
+          setTogglingApFor(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setTogglingApFor(null);
+        },
+      }
+    );
+  };
+
+  const handleSetWifiApPassword = (deviceId: string) => {
+    setSettingApPasswordFor(deviceId);
+    setError(null);
+    setWifiApPasswordMutation.mutate(
+      { deviceId },
+      {
+        onSuccess() {
+          setSettingApPasswordFor(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setSettingApPasswordFor(null);
+        },
+      }
+    );
+  };
+
   const isInitialLoading =
     !hasInitialData || discoverDevicesMutation.status === 'pending';
 
@@ -183,6 +222,7 @@ export function DeviceList() {
                 <Table.Th>IP</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Security</Table.Th>
+                <Table.Th>WiFi AP</Table.Th>
                 <Table.Th>Last seen</Table.Th>
                 <Table.Th>Actions</Table.Th>
               </Table.Tr>
@@ -212,6 +252,62 @@ export function DeviceList() {
                         </Tooltip>
                       );
                     })()}
+                  </Table.Td>
+                  <Table.Td>
+                    {device.authStatus === 'correct_password' && device.apEnabled !== undefined ? (
+                      <Group gap="xs">
+                        <Tooltip
+                          label={
+                            device.apEnabled
+                              ? device.apIsOpen
+                                ? 'AP is enabled but has no password'
+                                : 'AP is enabled and protected'
+                              : 'AP is disabled'
+                          }
+                        >
+                          <Badge
+                            color={
+                              !device.apEnabled
+                                ? 'gray'
+                                : device.apIsOpen
+                                ? 'orange'
+                                : 'green'
+                            }
+                            variant={device.apEnabled && device.apIsOpen ? 'filled' : 'light'}
+                          >
+                            {device.apEnabled ? (device.apIsOpen ? 'Open' : 'Protected') : 'Disabled'}
+                          </Badge>
+                        </Tooltip>
+                        <Tooltip label={device.apEnabled ? 'Disable WiFi AP' : 'Enable WiFi AP'}>
+                          <ActionIcon
+                            variant="light"
+                            color={device.apEnabled ? 'red' : 'green'}
+                            size="sm"
+                            onClick={() => handleToggleWifiAp(device.id, device.apEnabled!)}
+                            loading={togglingApFor === device.id}
+                          >
+                            {device.apEnabled ? <IconWifiOff size={14} /> : <IconWifi size={14} />}
+                          </ActionIcon>
+                        </Tooltip>
+                        {device.apEnabled && device.apIsOpen && (
+                          <Tooltip label="Set AP password (same as device password)">
+                            <ActionIcon
+                              variant="filled"
+                              color="orange"
+                              size="sm"
+                              onClick={() => handleSetWifiApPassword(device.id)}
+                              loading={settingApPasswordFor === device.id}
+                            >
+                              <IconKey size={14} />
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </Group>
+                    ) : (
+                      <Text size="sm" c="dimmed">
+                        {device.authStatus === 'correct_password' ? 'Loading...' : '-'}
+                      </Text>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm" c="dimmed">

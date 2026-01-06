@@ -41,6 +41,21 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  // WiFi AP management
+  setWifiApEnabled: t.procedure
+    .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ input }) => {
+      await shellyService.setWifiApEnabled(input.deviceId, input.enabled);
+      return { success: true };
+    }),
+
+  setWifiApPassword: t.procedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ input }) => {
+      await shellyService.setWifiApPassword(input.deviceId);
+      return { success: true };
+    }),
+
   controlDevice: t.procedure
     .input(
       z.object({
