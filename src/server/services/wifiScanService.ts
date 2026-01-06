@@ -4,7 +4,7 @@ import {
   WIFI_SCAN_INTERVAL,
   SHELLY_AP_PATTERN_GEN1,
   SHELLY_AP_PATTERN_GEN2,
-} from '@/shared/constants';
+} from '@/shared/constants.js';
 import type { UnprovisionedDevice } from '@/shared/types';
 
 const NM_SERVICE = 'org.freedesktop.NetworkManager';

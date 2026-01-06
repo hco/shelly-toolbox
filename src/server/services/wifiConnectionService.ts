@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import dbus from 'dbus-next';
-import { SHELLY_AP_IP } from '@/shared/constants';
+import { SHELLY_AP_IP } from '@/shared/constants.js';
 
 const NM_SERVICE = 'org.freedesktop.NetworkManager';
 const NM_PATH = '/org/freedesktop/NetworkManager';

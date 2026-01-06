@@ -13,7 +13,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
-COPY tsconfig.json vite.config.ts index.html tsr.config.json ./
+COPY tsconfig.json tsconfig.server.json vite.config.ts index.html tsr.config.json ./
 COPY src/ ./src/
 
 # Build the application (TypeScript compile + Vite build)

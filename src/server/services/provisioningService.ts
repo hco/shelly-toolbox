@@ -4,11 +4,11 @@ import {
   SHELLY_AP_IP,
   PROVISIONING_RETRY_COUNT,
   PROVISIONING_STEP_TIMEOUT,
-} from '@/shared/constants';
+} from '@/shared/constants.js';
 import type { ProvisioningStatus, UnprovisionedDevice } from '@/shared/types';
-import { wifiConnectionService } from './wifiConnectionService';
-import { notificationService } from './notificationService';
-import { configService } from './configService';
+import { wifiConnectionService } from './wifiConnectionService.js';
+import { notificationService } from './notificationService.js';
+import { configService } from './configService.js';
 
 interface ProvisioningState {
   ssid: string;
