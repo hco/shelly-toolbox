@@ -14,8 +14,11 @@ import {
   Title,
   Tooltip,
   ActionIcon,
+  Modal,
+  Menu,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey } from '@tabler/icons-react';
+import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconInfoCircle, IconReload, IconAlertTriangle, IconDots } from '@tabler/icons-react';
+import { useDisclosure } from '@mantine/hooks';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -66,15 +69,27 @@ export function DeviceList() {
 
   const [togglingApFor, setTogglingApFor] = useState<string | null>(null);
   const [settingApPasswordFor, setSettingApPasswordFor] = useState<string | null>(null);
+  const [rebootingDevice, setRebootingDevice] = useState<string | null>(null);
+  const [resettingDevice, setResettingDevice] = useState<string | null>(null);
+  const [refreshingDevice, setRefreshingDevice] = useState<string | null>(null);
+  const [deviceInfoModalOpened, { open: openDeviceInfo, close: closeDeviceInfo }] = useDisclosure(false);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
 
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
   const provisionDeviceMutation = trpc.provisionDevice.useMutation();
   const setWifiApEnabledMutation = trpc.setWifiApEnabled.useMutation();
   const setWifiApPasswordMutation = trpc.setWifiApPassword.useMutation();
+  const rebootDeviceMutation = trpc.rebootDevice.useMutation();
+  const factoryResetDeviceMutation = trpc.factoryResetDevice.useMutation();
+  const refreshDeviceStatusMutation = trpc.refreshDeviceStatus.useMutation();
   const { data: passwordData } = trpc.getShellyPassword.useQuery();
   const { data: autoProvisioningStatus } = trpc.getAutoProvisioningStatus.useQuery();
   const { data: provisioningWifi } = trpc.getProvisioningWifi.useQuery();
+  const { data: deviceInfo, refetch: refetchDeviceInfo } = trpc.getDeviceInfo.useQuery(
+    { deviceId: selectedDeviceId || '' },
+    { enabled: !!selectedDeviceId }
+  );
 
   // Subscribe to unprovisioned devices
   trpc.onUnprovisionedDevices.useSubscription(undefined, {
@@ -171,6 +186,63 @@ export function DeviceList() {
         },
       }
     );
+  };
+
+  const handleRebootDevice = (deviceId: string) => {
+    setRebootingDevice(deviceId);
+    setError(null);
+    rebootDeviceMutation.mutate(
+      { deviceId },
+      {
+        onSuccess() {
+          setRebootingDevice(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setRebootingDevice(null);
+        },
+      }
+    );
+  };
+
+  const handleFactoryReset = (deviceId: string) => {
+    setResettingDevice(deviceId);
+    setError(null);
+    factoryResetDeviceMutation.mutate(
+      { deviceId },
+      {
+        onSuccess() {
+          setResettingDevice(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setResettingDevice(null);
+        },
+      }
+    );
+  };
+
+  const handleRefreshStatus = (deviceId: string) => {
+    setRefreshingDevice(deviceId);
+    setError(null);
+    refreshDeviceStatusMutation.mutate(
+      { deviceId },
+      {
+        onSuccess() {
+          setRefreshingDevice(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setRefreshingDevice(null);
+        },
+      }
+    );
+  };
+
+  const handleShowDeviceInfo = (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    openDeviceInfo();
+    refetchDeviceInfo();
   };
 
   const isInitialLoading =
@@ -336,6 +408,47 @@ export function DeviceList() {
                           </ActionIcon>
                         </Tooltip>
                       )}
+                      <Tooltip label="Refresh device status">
+                        <ActionIcon
+                          variant="light"
+                          size="sm"
+                          onClick={() => handleRefreshStatus(device.id)}
+                          loading={refreshingDevice === device.id}
+                        >
+                          <IconRefresh size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Menu position="bottom-end" withinPortal>
+                        <Menu.Target>
+                          <ActionIcon variant="light" size="sm">
+                            <IconDots size={14} />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item
+                            leftSection={<IconInfoCircle size={14} />}
+                            onClick={() => handleShowDeviceInfo(device.id)}
+                          >
+                            Device Info
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={<IconReload size={14} />}
+                            onClick={() => handleRebootDevice(device.id)}
+                            disabled={!device.online || rebootingDevice === device.id}
+                          >
+                            Reboot Device
+                          </Menu.Item>
+                          <Menu.Divider />
+                          <Menu.Item
+                            leftSection={<IconAlertTriangle size={14} />}
+                            color="red"
+                            onClick={() => handleFactoryReset(device.id)}
+                            disabled={!device.online || resettingDevice === device.id}
+                          >
+                            Factory Reset
+                          </Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
                       <Anchor
                         href={`http://${device.ipAddress}`}
                         target="_blank"
@@ -452,6 +565,44 @@ export function DeviceList() {
           )}
         </>
       )}
+
+      {/* Device Info Modal */}
+      <Modal
+        opened={deviceInfoModalOpened}
+        onClose={closeDeviceInfo}
+        title="Device Information"
+        size="md"
+      >
+        {deviceInfo ? (
+          <Stack gap="md">
+            {deviceInfo.name && (
+              <div>
+                <Text size="sm" c="dimmed">Device Name</Text>
+                <Text fw={500}>{deviceInfo.name}</Text>
+              </div>
+            )}
+            {deviceInfo.id && (
+              <div>
+                <Text size="sm" c="dimmed">Device ID</Text>
+                <Text fw={500}>{deviceInfo.id}</Text>
+              </div>
+            )}
+            {deviceInfo.firmwareVersion && (
+              <div>
+                <Text size="sm" c="dimmed">Firmware Version</Text>
+                <Text fw={500}>{deviceInfo.firmwareVersion}</Text>
+              </div>
+            )}
+            {!deviceInfo.name && !deviceInfo.id && !deviceInfo.firmwareVersion && (
+              <Text c="dimmed" size="sm">No device information available</Text>
+            )}
+          </Stack>
+        ) : (
+          <Center py="xl">
+            <Loader />
+          </Center>
+        )}
+      </Modal>
     </Stack>
   );
 }
