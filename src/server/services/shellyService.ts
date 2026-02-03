@@ -737,6 +737,246 @@ class ShellyService extends EventEmitter {
     }
   }
 
+  async getDeviceInfo(deviceId: string): Promise<{ name?: string; id?: string; firmwareVersion?: string }> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    const password = configService.getShellyPassword();
+
+    try {
+      if (device.gen === 2) {
+        return await this.fetchGen2DeviceInfoFull(device.ipAddress, password);
+      } else {
+        return await this.fetchGen1DeviceInfoFull(device.ipAddress, password);
+      }
+    } catch (err) {
+      console.error(`[DeviceInfo] Failed to fetch info for ${device.name}:`, err);
+      // Return what we know from the local state
+      return { name: device.name, id: device.id };
+    }
+  }
+
+  private async fetchGen2DeviceInfoFull(
+    ipAddress: string,
+    password: string | null
+  ): Promise<{ name?: string; id?: string; firmwareVersion?: string }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      let response: Response;
+      if (password) {
+        const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/Shelly.GetDeviceInfo');
+        response = await fetch(`http://${ipAddress}/rpc/Shelly.GetDeviceInfo`, {
+          signal: controller.signal,
+          headers: authHeader ? { Authorization: authHeader } : {},
+        });
+      } else {
+        response = await fetch(`http://${ipAddress}/rpc/Shelly.GetDeviceInfo`, {
+          signal: controller.signal,
+        });
+      }
+      clearTimeout(timeout);
+
+      if (!response.ok) return {};
+
+      const data = await response.json();
+      return {
+        name: data.name || undefined,
+        id: data.id || undefined,
+        firmwareVersion: data.ver || undefined,
+      };
+    } catch {
+      clearTimeout(timeout);
+      return {};
+    }
+  }
+
+  private async fetchGen1DeviceInfoFull(
+    ipAddress: string,
+    password: string | null
+  ): Promise<{ name?: string; id?: string; firmwareVersion?: string }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const headers: Record<string, string> = {};
+      if (password) {
+        headers.Authorization = `Basic ${Buffer.from(`admin:${password}`).toString('base64')}`;
+      }
+
+      const response = await fetch(`http://${ipAddress}/settings`, {
+        signal: controller.signal,
+        headers,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return {};
+
+      const data = await response.json();
+      return {
+        name: data.name || undefined,
+        id: data.device?.hostname || undefined,
+        firmwareVersion: data.fw || undefined,
+      };
+    } catch {
+      clearTimeout(timeout);
+      return {};
+    }
+  }
+
+  async rebootDevice(deviceId: string): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    const password = configService.getShellyPassword();
+
+    if (device.gen === 2) {
+      const authHeader = password
+        ? await this.getGen2PostAuthHeader(device.ipAddress, password, '/rpc')
+        : null;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(`http://${device.ipAddress}/rpc`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {}),
+          },
+          body: JSON.stringify({ id: 1, method: 'Shelly.Reboot' }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Reboot failed: ${response.status} ${text}`);
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new Error(`Timeout rebooting ${device.name}`);
+        }
+        throw err;
+      }
+    } else {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const headers: Record<string, string> = {};
+        if (password) {
+          headers.Authorization = `Basic ${Buffer.from(`admin:${password}`).toString('base64')}`;
+        }
+        const response = await fetch(`http://${device.ipAddress}/reboot`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Reboot failed: ${response.status} ${text}`);
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new Error(`Timeout rebooting ${device.name}`);
+        }
+        throw err;
+      }
+    }
+
+    console.log(`[Device] Rebooted ${device.name}`);
+  }
+
+  async factoryResetDevice(deviceId: string): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    const password = configService.getShellyPassword();
+
+    if (device.gen === 2) {
+      const authHeader = password
+        ? await this.getGen2PostAuthHeader(device.ipAddress, password, '/rpc')
+        : null;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(`http://${device.ipAddress}/rpc`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {}),
+          },
+          body: JSON.stringify({ id: 1, method: 'Shelly.FactoryReset' }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Factory reset failed: ${response.status} ${text}`);
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new Error(`Timeout factory resetting ${device.name}`);
+        }
+        throw err;
+      }
+    } else {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const headers: Record<string, string> = {};
+        if (password) {
+          headers.Authorization = `Basic ${Buffer.from(`admin:${password}`).toString('base64')}`;
+        }
+        const response = await fetch(
+          `http://${device.ipAddress}/settings?factory_reset=true`,
+          { signal: controller.signal, headers }
+        );
+        clearTimeout(timeout);
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Factory reset failed: ${response.status} ${text}`);
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new Error(`Timeout factory resetting ${device.name}`);
+        }
+        throw err;
+      }
+    }
+
+    console.log(`[Device] Factory reset ${device.name}`);
+    // Remove from local state since it will come back as a new device
+    this.devices.delete(deviceId);
+    this.emit('devicesChanged');
+  }
+
+  async refreshDeviceStatus(deviceId: string): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    await this.fetchAuthStatus(device);
+  }
+
   // Re-check auth status for all devices (called when password config changes)
   async recheckAllAuthStatus(): Promise<void> {
     const devices = Array.from(this.devices.values());

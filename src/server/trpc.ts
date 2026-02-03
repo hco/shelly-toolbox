@@ -87,6 +87,33 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  getDeviceInfo: t.procedure
+    .input(z.object({ deviceId: z.string() }))
+    .query(async ({ input }) => {
+      return shellyService.getDeviceInfo(input.deviceId);
+    }),
+
+  rebootDevice: t.procedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ input }) => {
+      await shellyService.rebootDevice(input.deviceId);
+      return { success: true };
+    }),
+
+  factoryResetDevice: t.procedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ input }) => {
+      await shellyService.factoryResetDevice(input.deviceId);
+      return { success: true };
+    }),
+
+  refreshDeviceStatus: t.procedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ input }) => {
+      await shellyService.refreshDeviceStatus(input.deviceId);
+      return { success: true };
+    }),
+
   discoverDevices: t.procedure.mutation(async () => {
     return shellyService.startDiscovery();
   }),
