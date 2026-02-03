@@ -26,6 +26,9 @@ export const DeviceSchema = z.object({
   // WiFi AP configuration (only available for authenticated devices)
   apEnabled: z.boolean().optional(),
   apIsOpen: z.boolean().optional(),
+  // Gen2+ device status (only available for authenticated Gen2 devices)
+  ecoMode: z.boolean().optional(),
+  wifiRssi: z.number().optional(), // dBm, e.g. -45
 });
 
 export type AuthStatus = z.infer<typeof AuthStatusSchema>;

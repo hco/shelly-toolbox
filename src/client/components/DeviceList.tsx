@@ -17,7 +17,7 @@ import {
   Modal,
   Menu,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconInfoCircle, IconReload, IconAlertTriangle, IconDots } from '@tabler/icons-react';
+import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconInfoCircle, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
@@ -58,6 +58,25 @@ const AUTH_STATUS_CONFIG: Record<
     variant: 'filled',
   },
 };
+
+/** Convert RSSI (dBm) to a 0-100 percentage. Maps -90 dBm → 0%, -30 dBm → 100%. */
+function rssiToPercent(rssi: number): number {
+  return Math.min(Math.max(((rssi + 90) * 100) / 60, 0), 100);
+}
+
+function rssiColor(rssi: number): string {
+  if (rssi >= -50) return 'green';
+  if (rssi >= -65) return 'yellow';
+  if (rssi >= -75) return 'orange';
+  return 'red';
+}
+
+function rssiLabel(rssi: number): string {
+  if (rssi >= -50) return 'Excellent';
+  if (rssi >= -65) return 'Good';
+  if (rssi >= -75) return 'Fair';
+  return 'Weak';
+}
 
 export function DeviceList() {
   const [devices, setDevices] = useState<DevicesOutput>([] as DevicesOutput);
@@ -293,6 +312,7 @@ export function DeviceList() {
                 <Table.Th>Type</Table.Th>
                 <Table.Th>IP</Table.Th>
                 <Table.Th>Status</Table.Th>
+                <Table.Th>WiFi Signal</Table.Th>
                 <Table.Th>Security</Table.Th>
                 <Table.Th>WiFi AP</Table.Th>
                 <Table.Th>Last seen</Table.Th>
@@ -306,9 +326,42 @@ export function DeviceList() {
                   <Table.Td>{device.type}</Table.Td>
                   <Table.Td>{device.ipAddress}</Table.Td>
                   <Table.Td>
-                    <Badge color={device.online ? 'green' : 'gray'}>
-                      {device.online ? 'Online' : 'Offline'}
-                    </Badge>
+                    <Group gap={6}>
+                      <Badge color={device.online ? 'green' : 'gray'}>
+                        {device.online ? 'Online' : 'Offline'}
+                      </Badge>
+                      {device.gen === 2 && device.ecoMode !== undefined && (
+                        <Tooltip label={device.ecoMode ? 'Eco mode enabled' : 'Eco mode disabled'}>
+                          <Badge
+                            color={device.ecoMode ? 'teal' : 'gray'}
+                            variant={device.ecoMode ? 'light' : 'outline'}
+                            size="sm"
+                            leftSection={device.ecoMode ? <IconLeaf size={12} /> : <IconBolt size={12} />}
+                          >
+                            {device.ecoMode ? 'Eco' : 'Perf'}
+                          </Badge>
+                        </Tooltip>
+                      )}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td>
+                    {device.gen === 2 && device.wifiRssi !== undefined ? (
+                      <Tooltip label={`${rssiLabel(device.wifiRssi)} (${device.wifiRssi} dBm)`}>
+                        <Group gap="xs">
+                          <Progress
+                            value={rssiToPercent(device.wifiRssi)}
+                            size="sm"
+                            w={60}
+                            color={rssiColor(device.wifiRssi)}
+                          />
+                          <Text size="xs" c="dimmed">
+                            {device.wifiRssi} dBm
+                          </Text>
+                        </Group>
+                      </Tooltip>
+                    ) : (
+                      <Text size="sm" c="dimmed">-</Text>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     {(() => {

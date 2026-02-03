@@ -211,12 +211,16 @@ class ShellyService extends EventEmitter {
         this.emit('deviceUpdate', existingDevice);
         this.emit('devicesChanged');
 
-        // If we can authenticate, fetch device name and WiFi AP config in parallel
+        // If we can authenticate, fetch device name, WiFi AP config, and Gen2 status in parallel
         if (authStatus === 'correct_password') {
-          await Promise.all([
+          const fetches: Promise<void>[] = [
             this.fetchDeviceName(existingDevice),
-            this.fetchWifiApConfig(existingDevice)
-          ]);
+            this.fetchWifiApConfig(existingDevice),
+          ];
+          if (detectedGen === 2) {
+            fetches.push(this.fetchGen2Status(existingDevice));
+          }
+          await Promise.all(fetches);
         }
       }
     } catch (err) {
@@ -368,6 +372,100 @@ class ShellyService extends EventEmitter {
       }
     } catch (err) {
       console.error(`[WiFi AP] Failed to fetch AP config for ${device.name}:`, err);
+    }
+  }
+
+  private async fetchGen2Status(device: Device): Promise<void> {
+    const password = configService.getShellyPassword();
+    if (!password) return;
+
+    try {
+      console.log(`[Gen2 Status] Fetching eco mode and WiFi RSSI for ${device.name}`);
+
+      const [ecoMode, wifiRssi] = await Promise.all([
+        this.fetchGen2EcoMode(device.ipAddress, password),
+        this.fetchGen2WifiRssi(device.ipAddress, password),
+      ]);
+
+      let changed = false;
+      if (ecoMode !== null) {
+        device.ecoMode = ecoMode;
+        changed = true;
+      }
+      if (wifiRssi !== null) {
+        device.wifiRssi = wifiRssi;
+        changed = true;
+      }
+
+      if (changed) {
+        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}`);
+        this.emit('deviceUpdate', device);
+        this.emit('devicesChanged');
+      }
+    } catch (err) {
+      console.error(`[Gen2 Status] Failed to fetch status for ${device.name}:`, err);
+    }
+  }
+
+  private async fetchGen2EcoMode(
+    ipAddress: string,
+    password: string
+  ): Promise<boolean | null> {
+    const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/Sys.GetConfig');
+    if (!authHeader) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/rpc/Sys.GetConfig`, {
+        signal: controller.signal,
+        headers: { Authorization: authHeader },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // Response structure: { device: { name, eco_mode, ... }, ... }
+      if (data.device && typeof data.device.eco_mode === 'boolean') {
+        return data.device.eco_mode;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async fetchGen2WifiRssi(
+    ipAddress: string,
+    password: string
+  ): Promise<number | null> {
+    const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/WiFi.GetStatus');
+    if (!authHeader) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/rpc/WiFi.GetStatus`, {
+        signal: controller.signal,
+        headers: { Authorization: authHeader },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // Response structure: { sta_ip: "...", status: "got ip", ssid: "...", rssi: -45 }
+      if (typeof data.rssi === 'number') {
+        return data.rssi;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
     }
   }
 
