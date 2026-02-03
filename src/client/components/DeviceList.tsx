@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  Anchor,
   Badge,
   Button,
   Card,
@@ -9,15 +8,16 @@ import {
   Loader,
   Progress,
   Stack,
-  Table,
   Text,
   Title,
   Tooltip,
   ActionIcon,
   Modal,
   Menu,
+  Box,
+  SimpleGrid,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconInfoCircle, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt } from '@tabler/icons-react';
+import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconInfoCircle, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
@@ -267,9 +267,228 @@ export function DeviceList() {
   const isInitialLoading =
     !hasInitialData || discoverDevicesMutation.status === 'pending';
 
+  const renderDeviceCard = (device: DevicesOutput[number]) => {
+    const securityConfig = AUTH_STATUS_CONFIG[device.authStatus];
+    const hasWifiInfo = device.gen === 2 && device.wifiRssi !== undefined;
+    const hasApInfo = device.authStatus === 'correct_password' && device.apEnabled !== undefined;
+
+    return (
+      <Card
+        key={device.id}
+        withBorder
+        radius="md"
+        padding="md"
+        style={{
+          borderLeft: `3px solid var(--mantine-color-${device.online ? 'green' : 'gray'}-4)`,
+        }}
+      >
+        {/* Header: Name + Actions */}
+        <Group justify="space-between" wrap="nowrap" gap="sm">
+          <Box style={{ minWidth: 0, flex: 1 }}>
+            <Text fw={600} size="sm" truncate>
+              {device.name}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {device.type} &middot; {device.ipAddress}
+            </Text>
+          </Box>
+          <Group gap={4} wrap="nowrap">
+            {device.authStatus === 'unprotected' && device.online && (
+              <Tooltip
+                label={
+                  passwordData?.hasPassword
+                    ? 'Set configured password on this device'
+                    : 'Configure a password in Settings first'
+                }
+              >
+                <ActionIcon
+                  variant="filled"
+                  color="orange"
+                  size="sm"
+                  onClick={() => handleSetDevicePassword(device.id)}
+                  loading={settingPasswordFor === device.id}
+                  disabled={!passwordData?.hasPassword}
+                >
+                  <IconLock size={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            <Tooltip label="Refresh device status">
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                onClick={() => handleRefreshStatus(device.id)}
+                loading={refreshingDevice === device.id}
+              >
+                <IconRefresh size={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray" size="sm">
+                  <IconDots size={14} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconInfoCircle size={14} />}
+                  onClick={() => handleShowDeviceInfo(device.id)}
+                >
+                  Device Info
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconExternalLink size={14} />}
+                  component="a"
+                  href={`http://${device.ipAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open Web UI
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
+                  leftSection={<IconReload size={14} />}
+                  onClick={() => handleRebootDevice(device.id)}
+                  disabled={!device.online || rebootingDevice === device.id}
+                >
+                  Reboot Device
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconAlertTriangle size={14} />}
+                  color="red"
+                  onClick={() => handleFactoryReset(device.id)}
+                  disabled={!device.online || resettingDevice === device.id}
+                >
+                  Factory Reset
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+        </Group>
+
+        {/* Status badges row */}
+        <Group gap={6} mt="sm" wrap="wrap">
+          <Badge
+            color={device.online ? 'green' : 'gray'}
+            variant="light"
+            size="sm"
+          >
+            {device.online ? 'Online' : 'Offline'}
+          </Badge>
+          {device.gen === 2 && device.ecoMode !== undefined && (
+            <Tooltip label={device.ecoMode ? 'Eco mode enabled' : 'Eco mode disabled'}>
+              <Badge
+                color={device.ecoMode ? 'teal' : 'gray'}
+                variant="light"
+                size="sm"
+                leftSection={device.ecoMode ? <IconLeaf size={10} /> : <IconBolt size={10} />}
+              >
+                {device.ecoMode ? 'Eco' : 'Perf'}
+              </Badge>
+            </Tooltip>
+          )}
+          <Tooltip label={securityConfig.tooltip}>
+            <Badge
+              color={securityConfig.color}
+              variant={securityConfig.variant as 'light' | 'filled'}
+              size="sm"
+            >
+              {securityConfig.label}
+            </Badge>
+          </Tooltip>
+        </Group>
+
+        {/* Detail row: WiFi signal + AP info */}
+        {(hasWifiInfo || hasApInfo) && (
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="sm">
+            {hasWifiInfo && (
+              <Box>
+                <Text size="xs" c="dimmed" mb={4}>WiFi Signal</Text>
+                <Tooltip label={`${rssiLabel(device.wifiRssi!)} (${device.wifiRssi} dBm)`}>
+                  <Group gap="xs" wrap="nowrap">
+                    <Progress
+                      value={rssiToPercent(device.wifiRssi!)}
+                      size={6}
+                      w={60}
+                      color={rssiColor(device.wifiRssi!)}
+                      radius="xl"
+                    />
+                    <Text size="xs" c="dimmed">
+                      {device.wifiRssi} dBm
+                    </Text>
+                  </Group>
+                </Tooltip>
+              </Box>
+            )}
+            {hasApInfo && (
+              <Box>
+                <Text size="xs" c="dimmed" mb={4}>WiFi AP</Text>
+                <Group gap={6} wrap="wrap">
+                  <Tooltip
+                    label={
+                      device.apEnabled
+                        ? device.apIsOpen
+                          ? 'AP is enabled but has no password'
+                          : 'AP is enabled and protected'
+                        : 'AP is disabled'
+                    }
+                  >
+                    <Badge
+                      size="sm"
+                      color={
+                        !device.apEnabled
+                          ? 'gray'
+                          : device.apIsOpen
+                          ? 'orange'
+                          : 'green'
+                      }
+                      variant={device.apEnabled && device.apIsOpen ? 'filled' : 'light'}
+                    >
+                      {device.apEnabled ? (device.apIsOpen ? 'Open' : 'Protected') : 'Disabled'}
+                    </Badge>
+                  </Tooltip>
+                  <Tooltip label={device.apEnabled ? 'Disable WiFi AP' : 'Enable WiFi AP'}>
+                    <ActionIcon
+                      variant="subtle"
+                      color={device.apEnabled ? 'red' : 'green'}
+                      size="xs"
+                      onClick={() => handleToggleWifiAp(device.id, device.apEnabled!)}
+                      loading={togglingApFor === device.id}
+                    >
+                      {device.apEnabled ? <IconWifiOff size={12} /> : <IconWifi size={12} />}
+                    </ActionIcon>
+                  </Tooltip>
+                  {device.apEnabled && device.apIsOpen && (
+                    <Tooltip label="Set AP password (same as device password)">
+                      <ActionIcon
+                        variant="filled"
+                        color="orange"
+                        size="xs"
+                        onClick={() => handleSetWifiApPassword(device.id)}
+                        loading={settingApPasswordFor === device.id}
+                      >
+                        <IconKey size={12} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </Group>
+              </Box>
+            )}
+          </SimpleGrid>
+        )}
+
+        {/* Footer: Last seen */}
+        <Text size="xs" c="dimmed" mt="sm">
+          Last seen {new Date(device.lastSeen).toLocaleString()}
+        </Text>
+      </Card>
+    );
+  };
+
   return (
     <Stack gap="md">
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap" gap="sm">
         <div>
           <Title order={2}>Devices</Title>
           <Text c="dimmed" size="sm">
@@ -282,7 +501,7 @@ export function DeviceList() {
       </Group>
 
       {error && (
-        <Card withBorder padding="sm" radius="sm" bg="red.0">
+        <Card withBorder padding="sm" radius="md" bg="red.0">
           <Text c="red.7" size="sm">
             {error}
           </Text>
@@ -296,273 +515,56 @@ export function DeviceList() {
       )}
 
       {hasInitialData && devices.length === 0 && !error && (
-        <Card withBorder radius="sm">
-          <Text c="dimmed" size="sm">
+        <Card withBorder radius="md" padding="lg">
+          <Text c="dimmed" size="sm" ta="center">
             No devices discovered yet. Try running a discovery.
           </Text>
         </Card>
       )}
 
       {devices.length > 0 && (
-        <Card withBorder radius="sm">
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Name</Table.Th>
-                <Table.Th>Type</Table.Th>
-                <Table.Th>IP</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>WiFi Signal</Table.Th>
-                <Table.Th>Security</Table.Th>
-                <Table.Th>WiFi AP</Table.Th>
-                <Table.Th>Last seen</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {devices.map((device) => (
-                <Table.Tr key={device.id}>
-                  <Table.Td>{device.name}</Table.Td>
-                  <Table.Td>{device.type}</Table.Td>
-                  <Table.Td>{device.ipAddress}</Table.Td>
-                  <Table.Td>
-                    <Group gap={6}>
-                      <Badge color={device.online ? 'green' : 'gray'}>
-                        {device.online ? 'Online' : 'Offline'}
-                      </Badge>
-                      {device.gen === 2 && device.ecoMode !== undefined && (
-                        <Tooltip label={device.ecoMode ? 'Eco mode enabled' : 'Eco mode disabled'}>
-                          <Badge
-                            color={device.ecoMode ? 'teal' : 'gray'}
-                            variant={device.ecoMode ? 'light' : 'outline'}
-                            size="sm"
-                            leftSection={device.ecoMode ? <IconLeaf size={12} /> : <IconBolt size={12} />}
-                          >
-                            {device.ecoMode ? 'Eco' : 'Perf'}
-                          </Badge>
-                        </Tooltip>
-                      )}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    {device.gen === 2 && device.wifiRssi !== undefined ? (
-                      <Tooltip label={`${rssiLabel(device.wifiRssi)} (${device.wifiRssi} dBm)`}>
-                        <Group gap="xs">
-                          <Progress
-                            value={rssiToPercent(device.wifiRssi)}
-                            size="sm"
-                            w={60}
-                            color={rssiColor(device.wifiRssi)}
-                          />
-                          <Text size="xs" c="dimmed">
-                            {device.wifiRssi} dBm
-                          </Text>
-                        </Group>
-                      </Tooltip>
-                    ) : (
-                      <Text size="sm" c="dimmed">-</Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {(() => {
-                      const config = AUTH_STATUS_CONFIG[device.authStatus];
-                      return (
-                        <Tooltip label={config.tooltip}>
-                          <Badge
-                            color={config.color}
-                            variant={config.variant as 'light' | 'filled'}
-                          >
-                            {config.label}
-                          </Badge>
-                        </Tooltip>
-                      );
-                    })()}
-                  </Table.Td>
-                  <Table.Td>
-                    {device.authStatus === 'correct_password' && device.apEnabled !== undefined ? (
-                      <Group gap="xs">
-                        <Tooltip
-                          label={
-                            device.apEnabled
-                              ? device.apIsOpen
-                                ? 'AP is enabled but has no password'
-                                : 'AP is enabled and protected'
-                              : 'AP is disabled'
-                          }
-                        >
-                          <Badge
-                            color={
-                              !device.apEnabled
-                                ? 'gray'
-                                : device.apIsOpen
-                                ? 'orange'
-                                : 'green'
-                            }
-                            variant={device.apEnabled && device.apIsOpen ? 'filled' : 'light'}
-                          >
-                            {device.apEnabled ? (device.apIsOpen ? 'Open' : 'Protected') : 'Disabled'}
-                          </Badge>
-                        </Tooltip>
-                        <Tooltip label={device.apEnabled ? 'Disable WiFi AP' : 'Enable WiFi AP'}>
-                          <ActionIcon
-                            variant="light"
-                            color={device.apEnabled ? 'red' : 'green'}
-                            size="sm"
-                            onClick={() => handleToggleWifiAp(device.id, device.apEnabled!)}
-                            loading={togglingApFor === device.id}
-                          >
-                            {device.apEnabled ? <IconWifiOff size={14} /> : <IconWifi size={14} />}
-                          </ActionIcon>
-                        </Tooltip>
-                        {device.apEnabled && device.apIsOpen && (
-                          <Tooltip label="Set AP password (same as device password)">
-                            <ActionIcon
-                              variant="filled"
-                              color="orange"
-                              size="sm"
-                              onClick={() => handleSetWifiApPassword(device.id)}
-                              loading={settingApPasswordFor === device.id}
-                            >
-                              <IconKey size={14} />
-                            </ActionIcon>
-                          </Tooltip>
-                        )}
-                      </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        {device.authStatus === 'correct_password' ? 'Loading...' : '-'}
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed">
-                      {new Date(device.lastSeen).toLocaleString()}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      {device.authStatus === 'unprotected' && device.online && (
-                        <Tooltip
-                          label={
-                            passwordData?.hasPassword
-                              ? 'Set configured password on this device'
-                              : 'Configure a password in Settings first'
-                          }
-                        >
-                          <ActionIcon
-                            variant="filled"
-                            color="orange"
-                            size="sm"
-                            onClick={() => handleSetDevicePassword(device.id)}
-                            loading={settingPasswordFor === device.id}
-                            disabled={!passwordData?.hasPassword}
-                          >
-                            <IconLock size={14} />
-                          </ActionIcon>
-                        </Tooltip>
-                      )}
-                      <Tooltip label="Refresh device status">
-                        <ActionIcon
-                          variant="light"
-                          size="sm"
-                          onClick={() => handleRefreshStatus(device.id)}
-                          loading={refreshingDevice === device.id}
-                        >
-                          <IconRefresh size={14} />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Menu position="bottom-end" withinPortal>
-                        <Menu.Target>
-                          <ActionIcon variant="light" size="sm">
-                            <IconDots size={14} />
-                          </ActionIcon>
-                        </Menu.Target>
-                        <Menu.Dropdown>
-                          <Menu.Item
-                            leftSection={<IconInfoCircle size={14} />}
-                            onClick={() => handleShowDeviceInfo(device.id)}
-                          >
-                            Device Info
-                          </Menu.Item>
-                          <Menu.Item
-                            leftSection={<IconReload size={14} />}
-                            onClick={() => handleRebootDevice(device.id)}
-                            disabled={!device.online || rebootingDevice === device.id}
-                          >
-                            Reboot Device
-                          </Menu.Item>
-                          <Menu.Divider />
-                          <Menu.Item
-                            leftSection={<IconAlertTriangle size={14} />}
-                            color="red"
-                            onClick={() => handleFactoryReset(device.id)}
-                            disabled={!device.online || resettingDevice === device.id}
-                          >
-                            Factory Reset
-                          </Menu.Item>
-                        </Menu.Dropdown>
-                      </Menu>
-                      <Anchor
-                        href={`http://${device.ipAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Button size="xs" variant="light">
-                          Open
-                        </Button>
-                      </Anchor>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Card>
+        <Stack gap="sm">
+          {devices.map(renderDeviceCard)}
+        </Stack>
       )}
 
       {/* Unprovisioned Devices Section */}
       {autoProvisioningStatus?.enabled && unprovisionedDevices.length > 0 && (
         <>
-          <Group justify="space-between" mt="lg">
-            <div>
-              <Title order={3}>Unprovisioned Devices</Title>
-              <Text c="dimmed" size="sm">
-                Factory-default Shelly devices detected via WiFi. Configure them to join your network.
-              </Text>
-            </div>
-          </Group>
+          <div>
+            <Title order={3} mt="lg">Unprovisioned Devices</Title>
+            <Text c="dimmed" size="sm">
+              Factory-default Shelly devices detected via WiFi. Configure them to join your network.
+            </Text>
+          </div>
 
-          <Card withBorder radius="sm">
-            <Table>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>SSID</Table.Th>
-                  <Table.Th>Generation</Table.Th>
-                  <Table.Th>Signal</Table.Th>
-                  <Table.Th>First seen</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {unprovisionedDevices.map((device) => (
-                  <Table.Tr key={device.ssid}>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <IconWifi size={16} />
-                        <Text fw={500}>{device.ssid}</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge color="blue" variant="light">
+          <Stack gap="sm">
+            {unprovisionedDevices.map((device) => (
+              <Card
+                key={device.ssid}
+                withBorder
+                radius="md"
+                padding="md"
+                style={{
+                  borderLeft: '3px solid var(--mantine-color-blue-4)',
+                }}
+              >
+                <Group justify="space-between" wrap="nowrap" gap="sm">
+                  <Box style={{ minWidth: 0, flex: 1 }}>
+                    <Group gap="xs" wrap="nowrap">
+                      <IconWifi size={16} style={{ flexShrink: 0 }} />
+                      <Text fw={600} size="sm" truncate>{device.ssid}</Text>
+                    </Group>
+                    <Group gap="xs" mt={4}>
+                      <Badge color="blue" variant="light" size="sm">
                         Gen{device.gen}
                       </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
+                      <Group gap="xs" wrap="nowrap">
                         <Progress
                           value={device.signalStrength}
-                          size="sm"
-                          w={60}
+                          size={6}
+                          w={50}
+                          radius="xl"
                           color={
                             device.signalStrength > 70
                               ? 'green'
@@ -575,39 +577,35 @@ export function DeviceList() {
                           {device.signalStrength}%
                         </Text>
                       </Group>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm" c="dimmed">
-                        {new Date(device.firstSeen).toLocaleString()}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Tooltip
-                        label={
-                          provisioningWifi
-                            ? `Configure to join "${provisioningWifi.ssid}"`
-                            : 'Configure target WiFi in Settings first'
-                        }
-                      >
-                        <Button
-                          size="xs"
-                          color="blue"
-                          onClick={() => handleProvisionDevice(device.ssid)}
-                          loading={provisioningDevice === device.ssid}
-                          disabled={!provisioningWifi || autoProvisioningStatus?.isProvisioning}
-                        >
-                          Provision
-                        </Button>
-                      </Tooltip>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Card>
+                    </Group>
+                  </Box>
+                  <Tooltip
+                    label={
+                      provisioningWifi
+                        ? `Configure to join "${provisioningWifi.ssid}"`
+                        : 'Configure target WiFi in Settings first'
+                    }
+                  >
+                    <Button
+                      size="xs"
+                      color="blue"
+                      onClick={() => handleProvisionDevice(device.ssid)}
+                      loading={provisioningDevice === device.ssid}
+                      disabled={!provisioningWifi || autoProvisioningStatus?.isProvisioning}
+                    >
+                      Provision
+                    </Button>
+                  </Tooltip>
+                </Group>
+                <Text size="xs" c="dimmed" mt="xs">
+                  First seen {new Date(device.firstSeen).toLocaleString()}
+                </Text>
+              </Card>
+            ))}
+          </Stack>
 
           {autoProvisioningStatus?.isProvisioning && autoProvisioningStatus.currentStatus && (
-            <Card withBorder padding="sm" radius="sm" bg="blue.0">
+            <Card withBorder padding="sm" radius="md" bg="blue.0">
               <Group gap="sm">
                 <Loader size="sm" />
                 <Text size="sm">
