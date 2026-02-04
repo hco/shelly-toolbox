@@ -12,13 +12,11 @@ import {
   Title,
   Tooltip,
   ActionIcon,
-  Modal,
   Menu,
   Box,
   SimpleGrid,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconInfoCircle, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink } from '@tabler/icons-react';
-import { useDisclosure } from '@mantine/hooks';
+import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink } from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -91,8 +89,6 @@ export function DeviceList() {
   const [rebootingDevice, setRebootingDevice] = useState<string | null>(null);
   const [resettingDevice, setResettingDevice] = useState<string | null>(null);
   const [refreshingDevice, setRefreshingDevice] = useState<string | null>(null);
-  const [deviceInfoModalOpened, { open: openDeviceInfo, close: closeDeviceInfo }] = useDisclosure(false);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
 
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
@@ -105,10 +101,6 @@ export function DeviceList() {
   const { data: passwordData } = trpc.getShellyPassword.useQuery();
   const { data: autoProvisioningStatus } = trpc.getAutoProvisioningStatus.useQuery();
   const { data: provisioningWifi } = trpc.getProvisioningWifi.useQuery();
-  const { data: deviceInfo, refetch: refetchDeviceInfo } = trpc.getDeviceInfo.useQuery(
-    { deviceId: selectedDeviceId || '' },
-    { enabled: !!selectedDeviceId }
-  );
 
   // Subscribe to unprovisioned devices
   trpc.onUnprovisionedDevices.useSubscription(undefined, {
@@ -258,12 +250,6 @@ export function DeviceList() {
     );
   };
 
-  const handleShowDeviceInfo = (deviceId: string) => {
-    setSelectedDeviceId(deviceId);
-    openDeviceInfo();
-    refetchDeviceInfo();
-  };
-
   const isInitialLoading =
     !hasInitialData || discoverDevicesMutation.status === 'pending';
 
@@ -290,6 +276,7 @@ export function DeviceList() {
             </Text>
             <Text size="xs" c="dimmed">
               {device.type} &middot; {device.ipAddress}
+              {device.firmwareVersion && <> &middot; fw {device.firmwareVersion}</>}
             </Text>
           </Box>
           <Group gap={4} wrap="nowrap">
@@ -331,12 +318,6 @@ export function DeviceList() {
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<IconInfoCircle size={14} />}
-                  onClick={() => handleShowDeviceInfo(device.id)}
-                >
-                  Device Info
-                </Menu.Item>
                 <Menu.Item
                   leftSection={<IconExternalLink size={14} />}
                   component="a"
@@ -617,43 +598,6 @@ export function DeviceList() {
         </>
       )}
 
-      {/* Device Info Modal */}
-      <Modal
-        opened={deviceInfoModalOpened}
-        onClose={closeDeviceInfo}
-        title="Device Information"
-        size="md"
-      >
-        {deviceInfo ? (
-          <Stack gap="md">
-            {deviceInfo.name && (
-              <div>
-                <Text size="sm" c="dimmed">Device Name</Text>
-                <Text fw={500}>{deviceInfo.name}</Text>
-              </div>
-            )}
-            {deviceInfo.id && (
-              <div>
-                <Text size="sm" c="dimmed">Device ID</Text>
-                <Text fw={500}>{deviceInfo.id}</Text>
-              </div>
-            )}
-            {deviceInfo.firmwareVersion && (
-              <div>
-                <Text size="sm" c="dimmed">Firmware Version</Text>
-                <Text fw={500}>{deviceInfo.firmwareVersion}</Text>
-              </div>
-            )}
-            {!deviceInfo.name && !deviceInfo.id && !deviceInfo.firmwareVersion && (
-              <Text c="dimmed" size="sm">No device information available</Text>
-            )}
-          </Stack>
-        ) : (
-          <Center py="xl">
-            <Loader />
-          </Center>
-        )}
-      </Modal>
     </Stack>
   );
 }

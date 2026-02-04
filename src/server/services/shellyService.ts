@@ -181,6 +181,13 @@ class ShellyService extends EventEmitter {
           detectedGen = data.gen >= 2 ? 2 : 1;
         }
 
+        // Extract firmware version from /shelly response
+        // Gen2+: "ver" field, Gen1: "fw" field
+        const fw = data.ver || data.fw;
+        if (typeof fw === 'string') {
+          device.firmwareVersion = fw;
+        }
+
         // Gen2+ devices have auth_en field in /shelly response
         if ('auth_en' in data) {
           authEnabled = data.auth_en === true;
@@ -208,6 +215,9 @@ class ShellyService extends EventEmitter {
       if (existingDevice) {
         existingDevice.authStatus = authStatus;
         existingDevice.gen = detectedGen;
+        if (device.firmwareVersion) {
+          existingDevice.firmwareVersion = device.firmwareVersion;
+        }
         this.emit('deviceUpdate', existingDevice);
         this.emit('devicesChanged');
 
