@@ -1211,6 +1211,80 @@ class ShellyService extends EventEmitter {
     }
   }
 
+  async setBleEnabled(deviceId: string, enabled: boolean): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    if (device.gen !== 2) {
+      throw new Error(`BLE configuration is only available for Gen2+ devices`);
+    }
+
+    if (device.authStatus !== 'correct_password') {
+      throw new Error(`Cannot manage BLE: device ${device.name} is not authenticated`);
+    }
+
+    const password = configService.getShellyPassword();
+    if (!password) {
+      throw new Error('No password configured');
+    }
+
+    console.log(`[BLE] Setting BLE enabled=${enabled} for ${device.name}`);
+
+    const authHeader = await this.getGen2PostAuthHeader(device.ipAddress, password, '/rpc');
+    if (!authHeader) {
+      throw new Error('Failed to authenticate with device');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(`http://${device.ipAddress}/rpc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          id: 1,
+          method: 'BLE.SetConfig',
+          params: { config: { enable: enabled } },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to set BLE config: ${response.status} ${text}`);
+      }
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(`BLE.SetConfig failed: ${result.error.message || JSON.stringify(result.error)}`);
+      }
+
+      console.log(`[BLE] Successfully set BLE enabled=${enabled} for ${device.name}`);
+
+      // Update local state
+      device.bleEnabled = enabled;
+      this.emit('deviceUpdate', device);
+      this.emit('devicesChanged');
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Timeout setting BLE config for ${device.name}`);
+      }
+      throw err;
+    }
+  }
+
   async setWifiApEnabled(deviceId: string, enabled: boolean): Promise<void> {
     const device = this.devices.get(deviceId);
     if (!device) {

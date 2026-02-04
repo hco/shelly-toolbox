@@ -84,6 +84,7 @@ export function DeviceList() {
   const [unprovisionedDevices, setUnprovisionedDevices] = useState<UnprovisionedDevice[]>([]);
   const [provisioningDevice, setProvisioningDevice] = useState<string | null>(null);
 
+  const [togglingBleFor, setTogglingBleFor] = useState<string | null>(null);
   const [togglingApFor, setTogglingApFor] = useState<string | null>(null);
   const [settingApPasswordFor, setSettingApPasswordFor] = useState<string | null>(null);
   const [rebootingDevice, setRebootingDevice] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export function DeviceList() {
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
   const provisionDeviceMutation = trpc.provisionDevice.useMutation();
+  const setBleEnabledMutation = trpc.setBleEnabled.useMutation();
   const setWifiApEnabledMutation = trpc.setWifiApEnabled.useMutation();
   const setWifiApPasswordMutation = trpc.setWifiApPassword.useMutation();
   const rebootDeviceMutation = trpc.rebootDevice.useMutation();
@@ -160,6 +162,23 @@ export function DeviceList() {
         onError(err) {
           setError(err.message);
           setProvisioningDevice(null);
+        },
+      }
+    );
+  };
+
+  const handleToggleBle = (deviceId: string, currentEnabled: boolean) => {
+    setTogglingBleFor(deviceId);
+    setError(null);
+    setBleEnabledMutation.mutate(
+      { deviceId, enabled: !currentEnabled },
+      {
+        onSuccess() {
+          setTogglingBleFor(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setTogglingBleFor(null);
         },
       }
     );
@@ -370,12 +389,15 @@ export function DeviceList() {
             </Tooltip>
           )}
           {device.gen === 2 && device.bleEnabled !== undefined && (
-            <Tooltip label={device.bleEnabled ? 'Bluetooth enabled' : 'Bluetooth disabled'}>
+            <Tooltip label={device.bleEnabled ? 'Click to disable Bluetooth' : 'Click to enable Bluetooth'}>
               <Badge
                 color={device.bleEnabled ? 'blue' : 'gray'}
                 variant="light"
                 size="sm"
                 leftSection={device.bleEnabled ? <IconBluetooth size={10} /> : <IconBluetoothOff size={10} />}
+                style={{ cursor: 'pointer' }}
+                onClick={() => handleToggleBle(device.id, device.bleEnabled!)}
+                opacity={togglingBleFor === device.id ? 0.5 : 1}
               >
                 {device.bleEnabled ? 'BLE' : 'No BLE'}
               </Badge>

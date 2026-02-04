@@ -60,6 +60,14 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  // BLE management
+  setBleEnabled: t.procedure
+    .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ input }) => {
+      await shellyService.setBleEnabled(input.deviceId, input.enabled);
+      return { success: true };
+    }),
+
   // WiFi AP management
   setWifiApEnabled: t.procedure
     .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))
