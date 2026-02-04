@@ -16,7 +16,7 @@ import {
   Box,
   SimpleGrid,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink } from '@tabler/icons-react';
+import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink, IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -366,6 +366,18 @@ export function DeviceList() {
                 leftSection={device.ecoMode ? <IconLeaf size={10} /> : <IconBolt size={10} />}
               >
                 {device.ecoMode ? 'Eco' : 'Perf'}
+              </Badge>
+            </Tooltip>
+          )}
+          {device.gen === 2 && device.bleEnabled !== undefined && (
+            <Tooltip label={device.bleEnabled ? 'Bluetooth enabled' : 'Bluetooth disabled'}>
+              <Badge
+                color={device.bleEnabled ? 'blue' : 'gray'}
+                variant="light"
+                size="sm"
+                leftSection={device.bleEnabled ? <IconBluetooth size={10} /> : <IconBluetoothOff size={10} />}
+              >
+                {device.bleEnabled ? 'BLE' : 'No BLE'}
               </Badge>
             </Tooltip>
           )}

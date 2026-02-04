@@ -390,11 +390,12 @@ class ShellyService extends EventEmitter {
     if (!password) return;
 
     try {
-      console.log(`[Gen2 Status] Fetching eco mode and WiFi RSSI for ${device.name}`);
+      console.log(`[Gen2 Status] Fetching eco mode, WiFi RSSI, and BLE config for ${device.name}`);
 
-      const [ecoMode, wifiRssi] = await Promise.all([
+      const [ecoMode, wifiRssi, bleEnabled] = await Promise.all([
         this.fetchGen2EcoMode(device.ipAddress, password),
         this.fetchGen2WifiRssi(device.ipAddress, password),
+        this.fetchGen2BleConfig(device.ipAddress, password),
       ]);
 
       let changed = false;
@@ -406,9 +407,13 @@ class ShellyService extends EventEmitter {
         device.wifiRssi = wifiRssi;
         changed = true;
       }
+      if (bleEnabled !== null) {
+        device.bleEnabled = bleEnabled;
+        changed = true;
+      }
 
       if (changed) {
-        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}`);
+        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}, bleEnabled=${bleEnabled}`);
         this.emit('deviceUpdate', device);
         this.emit('devicesChanged');
       }
@@ -471,6 +476,37 @@ class ShellyService extends EventEmitter {
       // Response structure: { sta_ip: "...", status: "got ip", ssid: "...", rssi: -45 }
       if (typeof data.rssi === 'number') {
         return data.rssi;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async fetchGen2BleConfig(
+    ipAddress: string,
+    password: string
+  ): Promise<boolean | null> {
+    const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/BLE.GetConfig');
+    if (!authHeader) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/rpc/BLE.GetConfig`, {
+        signal: controller.signal,
+        headers: { Authorization: authHeader },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // Response structure: { enable: true/false }
+      if (typeof data.enable === 'boolean') {
+        return data.enable;
       }
       return null;
     } catch {

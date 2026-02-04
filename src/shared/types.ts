@@ -29,6 +29,7 @@ export const DeviceSchema = z.object({
   // Gen2+ device status (only available for authenticated Gen2 devices)
   ecoMode: z.boolean().optional(),
   wifiRssi: z.number().optional(), // dBm, e.g. -45
+  bleEnabled: z.boolean().optional(),
   // Device info (fetched from /shelly endpoint)
   firmwareVersion: z.string().optional(),
 });
