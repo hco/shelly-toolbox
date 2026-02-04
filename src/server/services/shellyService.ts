@@ -135,7 +135,7 @@ class ShellyService extends EventEmitter {
     // Full capability detection would require HTTP calls to the device
     return {
       id: mdnsDevice.id,
-      name: mdnsDevice.name,
+      name: mdnsDevice.type,
       type: mdnsDevice.type,
       ipAddress: mdnsDevice.ipAddress,
       online: true,
@@ -474,6 +474,8 @@ class ShellyService extends EventEmitter {
 
       const data = await response.json();
       // Response structure: { sta_ip: "...", status: "got ip", ssid: "...", rssi: -45 }
+      // If WiFi isn't connected (e.g. Ethernet-only), status won't be "got ip"
+      if (data.status !== 'got ip') return null;
       if (typeof data.rssi === 'number') {
         return data.rssi;
       }
