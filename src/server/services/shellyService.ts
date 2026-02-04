@@ -390,11 +390,12 @@ class ShellyService extends EventEmitter {
     if (!password) return;
 
     try {
-      console.log(`[Gen2 Status] Fetching eco mode, WiFi RSSI, and BLE config for ${device.name}`);
+      console.log(`[Gen2 Status] Fetching eco mode, WiFi/Eth status, and BLE config for ${device.name}`);
 
-      const [ecoMode, wifiRssi, bleEnabled] = await Promise.all([
+      const [ecoMode, wifiRssi, ethConnected, bleEnabled] = await Promise.all([
         this.fetchGen2EcoMode(device.ipAddress, password),
         this.fetchGen2WifiRssi(device.ipAddress, password),
+        this.fetchGen2EthStatus(device.ipAddress, password),
         this.fetchGen2BleConfig(device.ipAddress, password),
       ]);
 
@@ -407,13 +408,17 @@ class ShellyService extends EventEmitter {
         device.wifiRssi = wifiRssi;
         changed = true;
       }
+      if (ethConnected !== null) {
+        device.ethConnected = ethConnected;
+        changed = true;
+      }
       if (bleEnabled !== null) {
         device.bleEnabled = bleEnabled;
         changed = true;
       }
 
       if (changed) {
-        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}, bleEnabled=${bleEnabled}`);
+        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}, ethConnected=${ethConnected}, bleEnabled=${bleEnabled}`);
         this.emit('deviceUpdate', device);
         this.emit('devicesChanged');
       }
@@ -482,6 +487,35 @@ class ShellyService extends EventEmitter {
       return null;
     } catch {
       clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  private async fetchGen2EthStatus(
+    ipAddress: string,
+    password: string
+  ): Promise<boolean | null> {
+    const authHeader = await this.getGen2AuthHeader(ipAddress, password, '/rpc/Eth.GetStatus');
+    if (!authHeader) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(`http://${ipAddress}/rpc/Eth.GetStatus`, {
+        signal: controller.signal,
+        headers: { Authorization: authHeader },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      // Response structure: { ip: "192.168.1.x" } when connected, { ip: null } when not
+      return data.ip !== null;
+    } catch {
+      clearTimeout(timeout);
+      // Devices without Ethernet will return an error
       return null;
     }
   }

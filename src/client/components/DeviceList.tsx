@@ -16,7 +16,7 @@ import {
   Box,
   SimpleGrid,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink, IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
+import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink, IconBluetooth, IconBluetoothOff, IconNetwork } from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -275,6 +275,7 @@ export function DeviceList() {
   const renderDeviceCard = (device: DevicesOutput[number]) => {
     const securityConfig = AUTH_STATUS_CONFIG[device.authStatus];
     const hasWifiInfo = device.gen === 2 && device.wifiRssi !== undefined;
+    const hasEthInfo = device.gen === 2 && device.ethConnected === true;
     const hasApInfo = device.authStatus === 'correct_password' && device.apEnabled !== undefined;
 
     return (
@@ -414,9 +415,18 @@ export function DeviceList() {
           </Tooltip>
         </Group>
 
-        {/* Detail row: WiFi signal + AP info */}
-        {(hasWifiInfo || hasApInfo) && (
+        {/* Detail row: Connection + AP info */}
+        {(hasWifiInfo || hasEthInfo || hasApInfo) && (
           <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="sm">
+            {hasEthInfo && (
+              <Box>
+                <Text size="xs" c="dimmed" mb={4}>Connection</Text>
+                <Group gap="xs" wrap="nowrap">
+                  <IconNetwork size={14} color="var(--mantine-color-blue-5)" />
+                  <Text size="xs">Ethernet</Text>
+                </Group>
+              </Box>
+            )}
             {hasWifiInfo && (
               <Box>
                 <Text size="xs" c="dimmed" mb={4}>WiFi Signal</Text>
