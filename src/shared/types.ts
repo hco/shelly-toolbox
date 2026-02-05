@@ -94,3 +94,21 @@ export const ProvisioningStatusSchema = z.enum([
 ]);
 
 export type ProvisioningStatus = z.infer<typeof ProvisioningStatusSchema>;
+
+// Auth types
+export const AppUserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+  createdAt: z.coerce.date(),
+});
+
+export type AppUser = z.infer<typeof AppUserSchema>;
+
+export const AppAuthStatusSchema = z.object({
+  setupMode: z.boolean(),
+  authenticated: z.boolean(),
+  user: AppUserSchema.nullable(),
+});
+
+export type AppAuthStatus = z.infer<typeof AppAuthStatusSchema>;

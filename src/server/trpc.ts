@@ -1,4 +1,4 @@
-import { initTRPC } from '@trpc/server';
+import { initTRPC, TRPCError } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
 import { readFileSync } from 'fs';
@@ -13,9 +13,36 @@ import { shellyService } from './services/shellyService.js';
 import { configService } from './services/configService.js';
 import { notificationService } from './services/notificationService.js';
 import { provisioningService } from './services/provisioningService.js';
-import type { Device, UnprovisionedDevice, Notification } from '@/shared/types.js';
+import { authService } from './services/authService.js';
+import type { Device, UnprovisionedDevice, Notification, AppAuthStatus, AppUser } from '@/shared/types.js';
 
 const t = initTRPC.context<Context>().create();
+
+// Middleware that requires authentication (unless in setup mode)
+const requireAuth = t.middleware(({ ctx, next }) => {
+  // Allow access in setup mode (no users exist yet)
+  if (authService.isSetupMode()) {
+    return next({ ctx });
+  }
+
+  // Otherwise, require authentication
+  if (!ctx.user) {
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Authentication required',
+    });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+      session: ctx.session,
+    },
+  });
+});
+
+const protectedProcedure = t.procedure.use(requireAuth);
 
 // Get version from version.txt file (created during Docker build)
 let appVersion = 'dev';
@@ -30,17 +57,76 @@ try {
 }
 
 export const appRouter = t.router({
-  // Version info
+  // === Auth endpoints (public) ===
+  getAuthStatus: t.procedure.query(({ ctx }): AppAuthStatus => {
+    const setupMode = authService.isSetupMode();
+    return {
+      setupMode,
+      authenticated: !!ctx.user,
+      user: ctx.user
+        ? {
+            id: ctx.user.id,
+            email: ctx.user.email,
+            name: ctx.user.name,
+            createdAt: new Date(ctx.user.createdAt),
+          }
+        : null,
+    };
+  }),
+
+  // === User management (protected) ===
+  listUsers: protectedProcedure.query((): AppUser[] => {
+    return authService.listUsers();
+  }),
+
+  createUser: protectedProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        password: z.string().min(8, 'Password must be at least 8 characters'),
+      })
+    )
+    .mutation(async ({ input }) => {
+      // Use email as the name (better-auth requires a name)
+      const user = await authService.createUser(input.email, input.password, input.email);
+      return user;
+    }),
+
+  deleteUser: protectedProcedure
+    .input(z.object({ userId: z.string() }))
+    .mutation(({ input, ctx }) => {
+      // Prevent deleting own account
+      if (ctx.user && ctx.user.id === input.userId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot delete your own account',
+        });
+      }
+
+      // Prevent deleting last user
+      if (authService.getUserCount() <= 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot delete the last user',
+        });
+      }
+
+      authService.deleteUser(input.userId);
+      return { success: true };
+    }),
+
+  // === Version info (public) ===
   getVersion: t.procedure.query(() => {
     return { version: appVersion };
   }),
-  // Password configuration
-  getShellyPassword: t.procedure.query(() => {
+
+  // === Password configuration (protected) ===
+  getShellyPassword: protectedProcedure.query(() => {
     const password = configService.getShellyPassword();
     return { hasPassword: password !== null };
   }),
 
-  setShellyPassword: t.procedure
+  setShellyPassword: protectedProcedure
     .input(z.object({ password: z.string().nullable() }))
     .mutation(async ({ input }) => {
       configService.setShellyPassword(input.password);
@@ -49,7 +135,7 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
-  setDevicePassword: t.procedure
+  setDevicePassword: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .mutation(async ({ input }) => {
       const password = configService.getShellyPassword();
@@ -60,30 +146,30 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
-  // BLE management
-  setBleEnabled: t.procedure
+  // BLE management (protected)
+  setBleEnabled: protectedProcedure
     .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))
     .mutation(async ({ input }) => {
       await shellyService.setBleEnabled(input.deviceId, input.enabled);
       return { success: true };
     }),
 
-  // WiFi AP management
-  setWifiApEnabled: t.procedure
+  // WiFi AP management (protected)
+  setWifiApEnabled: protectedProcedure
     .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))
     .mutation(async ({ input }) => {
       await shellyService.setWifiApEnabled(input.deviceId, input.enabled);
       return { success: true };
     }),
 
-  setWifiApPassword: t.procedure
+  setWifiApPassword: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .mutation(async ({ input }) => {
       await shellyService.setWifiApPassword(input.deviceId);
       return { success: true };
     }),
 
-  controlDevice: t.procedure
+  controlDevice: protectedProcedure
     .input(
       z.object({
         deviceId: z.string(),
@@ -95,38 +181,38 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
-  getDeviceInfo: t.procedure
+  getDeviceInfo: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .query(async ({ input }) => {
       return shellyService.getDeviceInfo(input.deviceId);
     }),
 
-  rebootDevice: t.procedure
+  rebootDevice: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .mutation(async ({ input }) => {
       await shellyService.rebootDevice(input.deviceId);
       return { success: true };
     }),
 
-  factoryResetDevice: t.procedure
+  factoryResetDevice: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .mutation(async ({ input }) => {
       await shellyService.factoryResetDevice(input.deviceId);
       return { success: true };
     }),
 
-  refreshDeviceStatus: t.procedure
+  refreshDeviceStatus: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .mutation(async ({ input }) => {
       await shellyService.refreshDeviceStatus(input.deviceId);
       return { success: true };
     }),
 
-  discoverDevices: t.procedure.mutation(async () => {
+  discoverDevices: protectedProcedure.mutation(async () => {
     return shellyService.startDiscovery();
   }),
 
-  onDevices: t.procedure.subscription(() => {
+  onDevices: protectedProcedure.subscription(() => {
     return observable<Device[]>((emit) => {
       emit.next(shellyService.getDevices());
 
@@ -137,7 +223,7 @@ export const appRouter = t.router({
     });
   }),
 
-  onDeviceUpdate: t.procedure
+  onDeviceUpdate: protectedProcedure
     .input(z.object({ deviceId: z.string() }))
     .subscription(({ input }) => {
       return observable<Device>((emit) => {
@@ -151,7 +237,7 @@ export const appRouter = t.router({
       });
     }),
 
-  onDeviceDiscovered: t.procedure.subscription(() => {
+  onDeviceDiscovered: protectedProcedure.subscription(() => {
     return observable<Device>((emit) => {
       const handler = (device: Device) => emit.next(device);
       shellyService.on('deviceDiscovered', handler);
@@ -159,21 +245,21 @@ export const appRouter = t.router({
     });
   }),
 
-  // Provisioning WiFi configuration
-  getProvisioningWifi: t.procedure.query(() => {
+  // Provisioning WiFi configuration (protected)
+  getProvisioningWifi: protectedProcedure.query(() => {
     const wifi = configService.getProvisioningWifi();
     return wifi ? { ssid: wifi.ssid, hasPassword: true } : null;
   }),
 
-  setProvisioningWifi: t.procedure
+  setProvisioningWifi: protectedProcedure
     .input(z.object({ wifi: ProvisioningWifiSchema.nullable() }))
     .mutation(({ input }) => {
       configService.setProvisioningWifi(input.wifi);
       return { success: true };
     }),
 
-  // Auto-provisioning status
-  getAutoProvisioningStatus: t.procedure.query(() => {
+  // Auto-provisioning status (protected)
+  getAutoProvisioningStatus: protectedProcedure.query(() => {
     return {
       enabled: shellyService.isAutoProvisioningEnabled(),
       isProvisioning: provisioningService.isProvisioning(),
@@ -181,8 +267,8 @@ export const appRouter = t.router({
     };
   }),
 
-  // Unprovisioned devices
-  onUnprovisionedDevices: t.procedure.subscription(() => {
+  // Unprovisioned devices (protected)
+  onUnprovisionedDevices: protectedProcedure.subscription(() => {
     return observable<UnprovisionedDevice[]>((emit) => {
       emit.next(shellyService.getUnprovisionedDevices());
 
@@ -193,8 +279,8 @@ export const appRouter = t.router({
     });
   }),
 
-  // Provision a device
-  provisionDevice: t.procedure
+  // Provision a device (protected)
+  provisionDevice: protectedProcedure
     .input(z.object({ ssid: z.string() }))
     .mutation(async ({ input }) => {
       const devices = shellyService.getUnprovisionedDevices();
@@ -214,8 +300,8 @@ export const appRouter = t.router({
       return { success };
     }),
 
-  // Notifications
-  onNotifications: t.procedure.subscription(() => {
+  // Notifications (protected)
+  onNotifications: protectedProcedure.subscription(() => {
     return observable<Notification>((emit) => {
       const handler = (notification: Notification) => emit.next(notification);
       notificationService.on('notification', handler);
@@ -224,7 +310,7 @@ export const appRouter = t.router({
     });
   }),
 
-  getRecentNotifications: t.procedure
+  getRecentNotifications: protectedProcedure
     .input(z.object({ limit: z.number().optional() }).optional())
     .query(({ input }) => {
       return notificationService.getRecent(input?.limit);

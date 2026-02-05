@@ -2,6 +2,7 @@ import express from 'express';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { WebSocketServer } from 'ws';
+import { toNodeHandler } from 'better-auth/node';
 import { appRouter } from './trpc.js';
 import { createContext } from './context.js';
 import { SERVER_PORT, VITE_DEV_PORT } from '@/shared/constants.js';
@@ -9,6 +10,8 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { shellyService } from './services/shellyService.js';
 import { wifiConnectionService } from './services/wifiConnectionService.js';
+import { auth } from './auth.js';
+import { authService } from './services/authService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +28,13 @@ const autoProvisionEnabled =
 if (autoProvisionEnabled) {
   console.log('Auto-provisioning mode enabled');
 }
+
+// Initialize auth service cache
+authService.refreshUserCache();
+console.log(`Auth: ${authService.isSetupMode() ? 'Setup mode (no users)' : 'Users exist'}`);
+
+// Mount better-auth handler before other routes
+app.all('/api/auth/*splat', toNodeHandler(auth));
 
 app.use(
   '/trpc',

@@ -49,6 +49,12 @@ export const trpcClient = trpc.createClient({
           }),
       false: httpBatchLink({
         url: `${getBaseUrl()}/trpc`,
+        fetch(url, options) {
+          return fetch(url, {
+            ...options,
+            credentials: 'include',
+          });
+        },
       }),
     }),
   ],
