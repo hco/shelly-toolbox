@@ -14,6 +14,7 @@ import { configService } from './services/configService.js';
 import { notificationService } from './services/notificationService.js';
 import { provisioningService } from './services/provisioningService.js';
 import { authService } from './services/authService.js';
+import { scriptService } from './services/scriptService.js';
 import type { Device, UnprovisionedDevice, Notification, AppAuthStatus, AppUser } from '@/shared/types.js';
 
 const t = initTRPC.context<Context>().create();
@@ -315,6 +316,112 @@ export const appRouter = t.router({
     .query(({ input }) => {
       return notificationService.getRecent(input?.limit);
     }),
+
+  // === Script management ===
+  scripts: t.router({
+    list: protectedProcedure
+      .input(z.object({ includeArchived: z.boolean().optional() }).optional())
+      .query(({ input }) => scriptService.listScripts(input?.includeArchived ?? false)),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .query(({ input }) => {
+        const script = scriptService.getScript(input.id);
+        if (!script) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Script not found' });
+        }
+        return script;
+      }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(1).max(200),
+          description: z.string().max(2000).nullable().optional(),
+          code: z.string().max(100_000),
+        })
+      )
+      .mutation(({ input }) =>
+        scriptService.createScript({
+          name: input.name,
+          description: input.description ?? null,
+          code: input.code,
+        })
+      ),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.string(),
+          name: z.string().min(1).max(200).optional(),
+          description: z.string().max(2000).nullable().optional(),
+          code: z.string().max(100_000).optional(),
+        })
+      )
+      .mutation(({ input }) => {
+        const { id, ...rest } = input;
+        return scriptService.updateScript(id, rest);
+      }),
+
+    archive: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(({ input }) => {
+        scriptService.archiveScript(input.id);
+        return { success: true };
+      }),
+
+    unarchive: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(({ input }) => {
+        scriptService.unarchiveScript(input.id);
+        return { success: true };
+      }),
+
+    listOnDevice: protectedProcedure
+      .input(z.object({ deviceId: z.string() }))
+      .query(({ input }) => shellyService.getDeviceScripts(input.deviceId)),
+
+    deploy: protectedProcedure
+      .input(
+        z.object({
+          deviceId: z.string(),
+          scriptId: z.string(),
+          enable: z.boolean(),
+          start: z.boolean(),
+          targetShellyScriptId: z.number().int().optional(),
+        })
+      )
+      .mutation(({ input }) =>
+        shellyService.deployScriptToDevice(input.deviceId, input.scriptId, {
+          enable: input.enable,
+          start: input.start,
+          targetShellyScriptId: input.targetShellyScriptId,
+        })
+      ),
+
+    import: protectedProcedure
+      .input(z.object({ deviceId: z.string(), shellyScriptId: z.number().int() }))
+      .mutation(({ input }) =>
+        shellyService.importDeviceScript(input.deviceId, input.shellyScriptId)
+      ),
+
+    controlOnDevice: protectedProcedure
+      .input(
+        z.object({
+          deviceId: z.string(),
+          shellyScriptId: z.number().int(),
+          action: z.enum(['start', 'stop', 'delete']),
+        })
+      )
+      .mutation(async ({ input }) => {
+        await shellyService.controlDeviceScript(
+          input.deviceId,
+          input.shellyScriptId,
+          input.action
+        );
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

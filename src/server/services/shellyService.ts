@@ -1,19 +1,161 @@
 import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
-import type { Device, DeviceCommand, AuthStatus, UnprovisionedDevice } from '@/shared/types.js';
+import type { Device, DeviceCommand, AuthStatus, UnprovisionedDevice, OnDeviceScript, ScriptWithCode } from '@/shared/types.js';
 import { mdnsDiscovery, type MdnsDevice } from './mdnsDiscovery.js';
 import { configService } from './configService.js';
 import { wifiScanService, type ShellyAccessPoint } from './wifiScanService.js';
+import { ShellyHttpClient } from './http/ShellyHttpClient.js';
+import type { DeviceOperationContext } from './operations/types.js';
+import {
+  createDeviceScript,
+  deleteDeviceScript,
+  getDeviceScriptCode,
+  listDeviceScripts as listDeviceScriptsRpc,
+  putDeviceScriptCode,
+  setDeviceScriptConfig,
+  startDeviceScript,
+  stopDeviceScript,
+  type DeviceScriptInfo,
+} from './operations/gen2Scripts.js';
+import { scriptService, hashCode } from './scriptService.js';
 
 class ShellyService extends EventEmitter {
   private devices: Map<string, Device> = new Map();
   private unprovisionedDevices: Map<string, UnprovisionedDevice> = new Map();
   private autoProvisioningEnabled = false;
+  private httpClient = new ShellyHttpClient();
 
   constructor() {
     super();
     this.setupMdnsListeners();
     mdnsDiscovery.start();
+  }
+
+  /**
+   * Build a DeviceOperationContext for script operations.
+   * Validates device is online, Gen2, and authenticated with the configured password.
+   */
+  private buildScriptContext(deviceId: string): DeviceOperationContext {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+    if (device.gen !== 2) {
+      throw new Error(`Scripts are only supported on Gen2+ devices`);
+    }
+    if (device.authStatus !== 'correct_password') {
+      throw new Error(`Device ${device.name} is not authenticated`);
+    }
+    const password = configService.getShellyPassword();
+    if (!password) {
+      throw new Error('No password configured');
+    }
+    return { device, password, httpClient: this.httpClient };
+  }
+
+  async getDeviceScripts(deviceId: string): Promise<OnDeviceScript[]> {
+    const ctx = this.buildScriptContext(deviceId);
+    const scripts = await listDeviceScriptsRpc(ctx);
+
+    const results: OnDeviceScript[] = [];
+    for (const info of scripts) {
+      const code = await getDeviceScriptCode(ctx, info.id);
+      results.push(this.resolveOnDeviceScript(info, code));
+    }
+    return results;
+  }
+
+  private resolveOnDeviceScript(info: DeviceScriptInfo, code: string): OnDeviceScript {
+    const hash = hashCode(code);
+    const matches = scriptService.getVersionByHash(hash);
+
+    let match: OnDeviceScript['match'] = null;
+    if (matches.length === 1) {
+      const version = matches[0];
+      const latest = scriptService.getLatestVersion(version.scriptId);
+      const name = scriptService.getScriptNameById(version.scriptId);
+      if (latest && name) {
+        match = {
+          scriptId: version.scriptId,
+          scriptName: name,
+          version: version.version,
+          latestVersion: latest.version,
+          updateAvailable: latest.version > version.version,
+        };
+      }
+    }
+
+    return {
+      shellyScriptId: info.id,
+      name: info.name,
+      enable: info.enable,
+      running: info.running,
+      match,
+    };
+  }
+
+  async deployScriptToDevice(
+    deviceId: string,
+    toolboxScriptId: string,
+    opts: { enable: boolean; start: boolean; targetShellyScriptId?: number }
+  ): Promise<{ shellyScriptId: number }> {
+    const ctx = this.buildScriptContext(deviceId);
+    const script = scriptService.getScript(toolboxScriptId);
+    if (!script) {
+      throw new Error(`Script ${toolboxScriptId} not found`);
+    }
+
+    let shellyScriptId = opts.targetShellyScriptId;
+    if (shellyScriptId === undefined) {
+      shellyScriptId = await createDeviceScript(ctx, script.name);
+    }
+
+    await putDeviceScriptCode(ctx, shellyScriptId, script.code);
+    await setDeviceScriptConfig(ctx, shellyScriptId, {
+      name: script.name,
+      enable: opts.enable,
+    });
+
+    if (opts.start) {
+      await startDeviceScript(ctx, shellyScriptId);
+    } else {
+      await stopDeviceScript(ctx, shellyScriptId);
+    }
+
+    return { shellyScriptId };
+  }
+
+  async importDeviceScript(
+    deviceId: string,
+    shellyScriptId: number
+  ): Promise<ScriptWithCode> {
+    const ctx = this.buildScriptContext(deviceId);
+    const list = await listDeviceScriptsRpc(ctx);
+    const info = list.find((s) => s.id === shellyScriptId);
+    if (!info) {
+      throw new Error(`Script ${shellyScriptId} not found on device`);
+    }
+
+    const code = await getDeviceScriptCode(ctx, shellyScriptId);
+    return scriptService.createScript({ name: info.name, code });
+  }
+
+  async controlDeviceScript(
+    deviceId: string,
+    shellyScriptId: number,
+    action: 'start' | 'stop' | 'delete'
+  ): Promise<void> {
+    const ctx = this.buildScriptContext(deviceId);
+    if (action === 'start') {
+      await startDeviceScript(ctx, shellyScriptId);
+    } else if (action === 'stop') {
+      await stopDeviceScript(ctx, shellyScriptId);
+    } else {
+      await deleteDeviceScript(ctx, shellyScriptId);
+    }
   }
 
   async enableAutoProvisioning(): Promise<boolean> {

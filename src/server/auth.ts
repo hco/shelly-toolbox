@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { SERVER_PORT, VITE_DEV_PORT } from '@/shared/constants.js';
 
 // Ensure data directory exists
 const dataDir = path.join(process.cwd(), 'data');
@@ -68,13 +69,37 @@ function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_session_token ON session(token);
     CREATE INDEX IF NOT EXISTS idx_account_userId ON account(userId);
     CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
+
+    CREATE TABLE IF NOT EXISTS script (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      archivedAt DATETIME,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS script_version (
+      id TEXT PRIMARY KEY,
+      scriptId TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      code TEXT NOT NULL,
+      contentHash TEXT NOT NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (scriptId) REFERENCES script(id) ON DELETE CASCADE,
+      UNIQUE (scriptId, version)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_script_version_scriptId ON script_version(scriptId);
+    CREATE INDEX IF NOT EXISTS idx_script_version_contentHash ON script_version(contentHash);
+    CREATE INDEX IF NOT EXISTS idx_script_archivedAt ON script(archivedAt);
   `);
 }
 
 runMigrations();
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_BASE_URL || 'http://localhost:3001',
+  baseURL: process.env.BETTER_AUTH_BASE_URL || `http://localhost:${SERVER_PORT}`,
   database: db,
   emailAndPassword: {
     enabled: true,
@@ -83,7 +108,7 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30, // 30 days in seconds
     updateAge: 60 * 60 * 24, // Update session age daily
   },
-  trustedOrigins: ['http://localhost:3001', 'http://localhost:5173'],
+  trustedOrigins: [`http://localhost:${SERVER_PORT}`, `http://localhost:${VITE_DEV_PORT}`],
 });
 
 export type Session = typeof auth.$Infer.Session.session;

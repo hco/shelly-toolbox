@@ -112,3 +112,42 @@ export const AppAuthStatusSchema = z.object({
 });
 
 export type AppAuthStatus = z.infer<typeof AppAuthStatusSchema>;
+
+// === Script management ===
+
+export const ScriptSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  archivedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  latestVersion: z.number().int().positive(),
+});
+
+export type Script = z.infer<typeof ScriptSchema>;
+
+export const ScriptWithCodeSchema = ScriptSchema.extend({
+  code: z.string(),
+});
+
+export type ScriptWithCode = z.infer<typeof ScriptWithCodeSchema>;
+
+// A script as it appears on a Shelly device, enriched with toolbox-resolution metadata.
+export const OnDeviceScriptSchema = z.object({
+  shellyScriptId: z.number().int(),
+  name: z.string(),
+  enable: z.boolean(),
+  running: z.boolean(),
+  match: z
+    .object({
+      scriptId: z.string(),
+      scriptName: z.string(),
+      version: z.number().int().positive(),
+      latestVersion: z.number().int().positive(),
+      updateAvailable: z.boolean(),
+    })
+    .nullable(),
+});
+
+export type OnDeviceScript = z.infer<typeof OnDeviceScriptSchema>;

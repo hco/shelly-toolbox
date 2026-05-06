@@ -118,6 +118,16 @@ function RootLayout() {
                       </Tabs.Tab>
                     )}
                   </Link>
+                  <Link to="/scripts" style={{ textDecoration: 'none' }}>
+                    {({ isActive }: { isActive: boolean }) => (
+                      <Tabs.Tab
+                        value="/scripts"
+                        data-active={isActive || undefined}
+                      >
+                        Scripts
+                      </Tabs.Tab>
+                    )}
+                  </Link>
                   <Link to="/settings" style={{ textDecoration: 'none' }}>
                     {({ isActive }: { isActive: boolean }) => (
                       <Tabs.Tab
