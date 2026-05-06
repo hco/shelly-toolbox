@@ -121,20 +121,34 @@ class MdnsDiscovery extends EventEmitter {
   }
 
   private formatDeviceType(serviceName: string): string {
-    // Convert "shellyplus1-aabbcc" to "Shelly Plus 1"
+    // Convert e.g. "shellyplus1-aabbcc" to "Shelly Plus 1", "shellyi4g3-..." to "Shelly I4 Gen3"
     const match = serviceName.match(/^(shelly[^-]+)/i);
     if (!match) return serviceName;
 
-    const rawType = match[1];
-    // Insert spaces and capitalize
-    return rawType
-      .replace(/^shelly/i, 'Shelly ')
-      .replace(/plus/i, 'Plus ')
-      .replace(/pro/i, 'Pro ')
-      .replace(/mini/i, 'Mini ')
-      .replace(/(\d)/g, ' $1')
-      .replace(/\s+/g, ' ')
-      .trim();
+    let rest = match[1].toLowerCase().replace(/^shelly/, '');
+
+    // Trailing generation marker, e.g. "g3", "g4"
+    let genSuffix = '';
+    const genMatch = rest.match(/g(\d+)$/);
+    if (genMatch) {
+      genSuffix = ` Gen${genMatch[1]}`;
+      rest = rest.slice(0, -genMatch[0].length);
+    }
+
+    const parts: string[] = ['Shelly'];
+    for (const prefix of ['plus', 'pro', 'mini', 'blu']) {
+      if (rest.startsWith(prefix)) {
+        parts.push(prefix.charAt(0).toUpperCase() + prefix.slice(1));
+        rest = rest.slice(prefix.length);
+        break;
+      }
+    }
+
+    if (rest) {
+      parts.push(rest.toUpperCase());
+    }
+
+    return parts.join(' ') + genSuffix;
   }
 
   private isIPv4(address: string): boolean {
