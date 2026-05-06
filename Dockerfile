@@ -50,14 +50,14 @@ RUN mkdir -p /app/data
 ENV NODE_ENV=production
 
 # Expose the application port
-EXPOSE 3001
+EXPOSE 38731
 
 # Note: For mDNS device discovery to work, run with --network host
 # Example: docker run --network host -v shelly-data:/app/data ghcr.io/<owner>/shelly-toolbox
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/shelly || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:38731/shelly || exit 1
 
 # Start the application
 CMD ["node", "dist/server/index.js"]

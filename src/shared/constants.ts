@@ -1,5 +1,5 @@
-export const SERVER_PORT = 3001;
-export const VITE_DEV_PORT = 5174;
+export const SERVER_PORT = 38731;
+export const VITE_DEV_PORT = 38732;
 
 export const DEVICE_TYPES = {
   SWITCH: 'switch',

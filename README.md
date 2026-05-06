@@ -54,10 +54,10 @@ pnpm run dev
 ```
 
 This will start:
-- Vite dev server on port 5173
-- Backend server on port 3001 (proxies to Vite)
+- Vite dev server on port 38732
+- Backend server on port 38731 (proxies to Vite)
 
-Access the application at http://localhost:3001
+Access the application at http://localhost:38731
 
 Alternatively, run them separately:
 
@@ -133,7 +133,7 @@ One-liner to fetch and start with host networking and WiFi provisioning:
 curl -fsSL https://raw.githubusercontent.com/hco/shelly-toolbox/main/docker-compose.yml -o docker-compose.yml && docker compose up -d
 ```
 
-Access the application at http://localhost:3001
+Access the application at http://localhost:38731
 
 This configuration includes:
 - Host networking for mDNS device discovery
@@ -164,7 +164,7 @@ docker run -d \
   ghcr.io/hco/shelly-toolbox:latest
 ```
 
-Access the application at http://localhost:3001
+Access the application at http://localhost:38731
 
 **Note**: WiFi provisioning requires access to the host's NetworkManager via D-Bus and NET_ADMIN capability. If you don't need provisioning, you can omit `--cap-add=NET_ADMIN` and the D-Bus socket mount.
 
@@ -173,7 +173,7 @@ Access the application at http://localhost:3001
 ```bash
 docker run -d \
   --name shelly-toolbox \
-  -p 3001:3001 \
+  -p 38731:38731 \
   -v shelly-data:/app/data \
   ghcr.io/hco/shelly-toolbox:latest
 ```
@@ -197,7 +197,7 @@ The container stores configuration in `/app/data`. Mount a volume to persist set
 
 ## Manual Testing
 
-- Run `pnpm run dev` and open `http://localhost:3001` in a browser.
+- Run `pnpm run dev` and open `http://localhost:38731` in a browser.
 - Verify that the initial list of Shelly devices appears.
 - Trigger device actions from the UI and confirm that the list updates in real time.
 - Check your browser DevTools Network/WebSocket tab to confirm a WebSocket connection to `/trpc` is established and stays connected.
