@@ -70,3 +70,7 @@ src/
 ## Testing
 
 No automated testing framework. Manual testing via browser at http://localhost:38731.
+
+## Debugging
+
+When investigating backend issues, check `logs/server.log` if it exists — the dev server can be run with `--log-file` (or `SHELLY_LOG_FILE=path`) to persist console output there. Ask the user to restart the server with `pnpm run dev:server -- --log-file` if file logs aren't available yet.
