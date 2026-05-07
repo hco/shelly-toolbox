@@ -253,7 +253,8 @@ class ShellyService extends EventEmitter {
         existing.ipAddress = mdnsDevice.ipAddress;
         existing.lastSeen = new Date().toISOString();
         existing.online = true;
-        if (!wasOnline) {
+        const nameChanged = this.applyFriendlyName(existing, mdnsDevice);
+        if (!wasOnline || nameChanged) {
           this.emit('deviceUpdate', existing);
           this.emit('devicesChanged');
         }
@@ -275,6 +276,7 @@ class ShellyService extends EventEmitter {
         existing.ipAddress = mdnsDevice.ipAddress;
         existing.lastSeen = new Date().toISOString();
         existing.online = true;
+        this.applyFriendlyName(existing, mdnsDevice);
         this.emit('deviceUpdate', existing);
         this.emit('devicesChanged');
       }
@@ -295,7 +297,7 @@ class ShellyService extends EventEmitter {
     // Full capability detection would require HTTP calls to the device
     return {
       id: mdnsDevice.id,
-      name: mdnsDevice.type,
+      name: mdnsDevice.friendlyName ?? mdnsDevice.type,
       type: mdnsDevice.type,
       ipAddress: mdnsDevice.ipAddress,
       online: true,
@@ -310,6 +312,17 @@ class ShellyService extends EventEmitter {
       gen: mdnsDevice.gen,
       authStatus: 'unknown', // Will be fetched asynchronously
     };
+  }
+
+  // Adopt the user-assigned name from a friendly-name mDNS record. Returns
+  // true if the device's name actually changed, so callers can decide whether
+  // to broadcast an update.
+  private applyFriendlyName(device: Device, mdnsDevice: MdnsDevice): boolean {
+    if (!mdnsDevice.friendlyName || mdnsDevice.friendlyName === device.name) {
+      return false;
+    }
+    device.name = mdnsDevice.friendlyName;
+    return true;
   }
 
   private async fetchAuthStatus(device: Device): Promise<void> {

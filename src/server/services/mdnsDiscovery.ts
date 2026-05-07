@@ -8,6 +8,9 @@ export interface MdnsDevice {
   ipAddress: string;
   port: number;
   gen: number;
+  // User-assigned name from a friendly-name announcement, when this record
+  // wasn't the technical "shellyXXX-MAC" one. Undefined for technical records.
+  friendlyName?: string;
 }
 
 class MdnsDiscovery extends EventEmitter {
@@ -85,30 +88,37 @@ class MdnsDiscovery extends EventEmitter {
   }
 
   private parseService(service: Service, ipAddress: string): MdnsDevice | null {
-    const id = this.extractDeviceId(service);
+    // Shelly devices announce two _shelly._tcp records: one keyed by the
+    // technical hostname ("shellyi4g3-AABBCC") and one keyed by the user's
+    // configured device name ("Saal Taster Terasse"). Both records share the
+    // same SRV target (host), so we can recover the device id from the host
+    // when the service name itself doesn't carry it.
+    const isTechnicalName = this.matchTechnicalName(service.name) !== null;
+    const technicalSource = isTechnicalName ? service.name : service.host || '';
+    const id = this.matchTechnicalName(technicalSource);
     if (!id) {
       return null;
     }
 
     // Shelly mDNS names are like "shellyplus1-aabbcc", "shelly1-AABBCC", or "shellyXg4-..."
     // Heuristic only — the authoritative gen comes from the device's /shelly endpoint.
-    const nameLower = service.name.toLowerCase();
-    const explicitGenMatch = nameLower.match(/g(\d+)(?:-|$)/);
+    const techLower = technicalSource.toLowerCase();
+    const explicitGenMatch = techLower.match(/g(\d+)(?:-|$|\.)/);
     let gen: number;
     if (explicitGenMatch) {
       gen = parseInt(explicitGenMatch[1], 10);
     } else if (
-      nameLower.includes('plus') ||
-      nameLower.includes('pro') ||
-      nameLower.includes('mini') ||
-      nameLower.includes('blu')
+      techLower.includes('plus') ||
+      techLower.includes('pro') ||
+      techLower.includes('mini') ||
+      techLower.includes('blu')
     ) {
       gen = 2;
     } else {
       gen = 1;
     }
 
-    const type = this.formatDeviceType(service.name);
+    const type = this.formatDeviceType(technicalSource);
 
     return {
       id,
@@ -117,12 +127,23 @@ class MdnsDiscovery extends EventEmitter {
       ipAddress,
       port: service.port || 80,
       gen,
+      friendlyName: isTechnicalName ? undefined : service.name,
     };
   }
 
   private extractDeviceId(service: Service): string | null {
-    // Service name format: "shellyXXX-AABBCC" where AABBCC is the device ID
-    const match = service.name.match(/shelly[^-]+-([a-fA-F0-9]+)/i);
+    // Try the service instance name first; fall back to the SRV target so we
+    // still recognise the friendly-name record as belonging to a known device.
+    return (
+      this.matchTechnicalName(service.name) ||
+      this.matchTechnicalName(service.host || '')
+    );
+  }
+
+  private matchTechnicalName(value: string): string | null {
+    // Technical Shelly identifier: "shellyXXX-AABBCC" (optionally followed by
+    // ".local" when it comes from a hostname).
+    const match = value.match(/shelly[^-]+-([a-fA-F0-9]+)/i);
     return match ? match[1].toLowerCase() : null;
   }
 
