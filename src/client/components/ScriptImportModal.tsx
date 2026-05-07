@@ -25,7 +25,7 @@ export function ScriptImportModal({ opened, onClose, devices, onImported }: Prop
       devices.filter(
         (d) =>
           d.online &&
-          d.gen === 2 &&
+          d.gen >= 2 &&
           (d.authStatus === 'correct_password' || d.authStatus === 'unprotected')
       ),
     [devices]

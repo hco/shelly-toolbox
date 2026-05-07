@@ -130,7 +130,7 @@ export function Scripts() {
       devices.filter(
         (d) =>
           d.online &&
-          d.gen === 2 &&
+          d.gen >= 2 &&
           (d.authStatus === 'correct_password' || d.authStatus === 'unprotected')
       ),
     [devices]
