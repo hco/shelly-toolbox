@@ -245,6 +245,21 @@ class ShellyService extends EventEmitter {
 
   private setupMdnsListeners(): void {
     mdnsDiscovery.on('deviceFound', (mdnsDevice: MdnsDevice) => {
+      const existing = this.devices.get(mdnsDevice.id);
+      if (existing) {
+        // Already known — treat re-discovery as an update so we don't wipe
+        // authStatus, capabilities, firmware, AP/BLE info, etc.
+        const wasOnline = existing.online;
+        existing.ipAddress = mdnsDevice.ipAddress;
+        existing.lastSeen = new Date().toISOString();
+        existing.online = true;
+        if (!wasOnline) {
+          this.emit('deviceUpdate', existing);
+          this.emit('devicesChanged');
+        }
+        return;
+      }
+
       const device = this.createDeviceFromMdns(mdnsDevice);
       this.devices.set(device.id, device);
       this.emit('deviceDiscovered', device);

@@ -43,7 +43,6 @@ class MdnsDiscovery extends EventEmitter {
 
   restart(): void {
     this.stop();
-    this.discoveredDevices.clear();
     this.start();
   }
 
