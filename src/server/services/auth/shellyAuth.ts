@@ -105,7 +105,7 @@ export class ShellyAuthHelper {
     if (password === null) {
       return null;
     }
-    if (device.gen === 2) {
+    if (device.gen >= 2) {
       // Gen2: Fetch challenge and create digest auth header
       const challenge = await this.fetchGen2AuthChallenge(
         httpClient,

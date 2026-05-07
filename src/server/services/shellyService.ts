@@ -44,7 +44,7 @@ class ShellyService extends EventEmitter {
     if (!device.online) {
       throw new Error(`Device ${device.name} is offline`);
     }
-    if (device.gen !== 2) {
+    if (device.gen < 2) {
       throw new Error(`Scripts are only supported on Gen2+ devices`);
     }
     if (device.authStatus !== 'correct_password' && device.authStatus !== 'unprotected') {
@@ -405,13 +405,13 @@ class ShellyService extends EventEmitter {
     const password = configService.getShellyPassword();
     // For protected Gen1 devices we need a password; Gen2 can also try without one
     // when the device is unprotected.
-    if (device.gen !== 2 && !password) return;
+    if (device.gen < 2 && !password) return;
 
     try {
       console.log(`[Device Name] Fetching device name for ${device.name} (${device.ipAddress})`);
       let deviceName: string | null = null;
 
-      if (device.gen === 2) {
+      if (device.gen >= 2) {
         deviceName = await this.fetchGen2DeviceName(device.ipAddress, password);
       } else if (password) {
         deviceName = await this.fetchGen1DeviceName(device.ipAddress, password);
@@ -504,13 +504,13 @@ class ShellyService extends EventEmitter {
 
   private async fetchWifiApConfig(device: Device): Promise<void> {
     const password = configService.getShellyPassword();
-    if (device.gen !== 2 && !password) return;
+    if (device.gen < 2 && !password) return;
 
     try {
       console.log(`[WiFi AP] Fetching AP config for ${device.name}`);
       let apConfig: { enabled: boolean; isOpen: boolean } | null = null;
 
-      if (device.gen === 2) {
+      if (device.gen >= 2) {
         apConfig = await this.fetchGen2WifiApConfig(device.ipAddress, password);
       } else if (password) {
         apConfig = await this.fetchGen1WifiApConfig(device.ipAddress, password);
@@ -898,7 +898,7 @@ class ShellyService extends EventEmitter {
     const password = configService.getShellyPassword();
 
     try {
-      if (device.gen === 2) {
+      if (device.gen >= 2) {
         return await this.fetchGen2DeviceInfoFull(device.ipAddress, password);
       } else {
         return await this.fetchGen1DeviceInfoFull(device.ipAddress, password);
@@ -972,7 +972,7 @@ class ShellyService extends EventEmitter {
 
     const password = configService.getShellyPassword();
 
-    if (device.gen === 2) {
+    if (device.gen >= 2) {
       const response = await this.gen2Request(device.ipAddress, '/rpc', {
         method: 'POST',
         body: { id: 1, method: 'Shelly.Reboot' },
@@ -1026,7 +1026,7 @@ class ShellyService extends EventEmitter {
 
     const password = configService.getShellyPassword();
 
-    if (device.gen === 2) {
+    if (device.gen >= 2) {
       const response = await this.gen2Request(device.ipAddress, '/rpc', {
         method: 'POST',
         body: { id: 1, method: 'Shelly.FactoryReset' },
@@ -1142,7 +1142,7 @@ class ShellyService extends EventEmitter {
 
     console.log(`[Auth] Setting password for ${device.name} (Gen${device.gen})`);
 
-    if (device.gen === 2) {
+    if (device.gen >= 2) {
       await this.setGen2Password(device, password);
     } else {
       await this.setGen1Password(device, password);
@@ -1279,7 +1279,7 @@ class ShellyService extends EventEmitter {
       throw new Error(`Device ${device.name} is offline`);
     }
 
-    if (device.gen !== 2) {
+    if (device.gen < 2) {
       throw new Error(`BLE configuration is only available for Gen2+ devices`);
     }
 
@@ -1332,13 +1332,13 @@ class ShellyService extends EventEmitter {
     }
 
     const password = configService.getShellyPassword();
-    if (device.gen !== 2 && !password) {
+    if (device.gen < 2 && !password) {
       throw new Error('No password configured');
     }
 
     console.log(`[WiFi AP] Setting AP enabled=${enabled} for ${device.name}`);
 
-    if (device.gen === 2) {
+    if (device.gen >= 2) {
       await this.setGen2WifiApEnabled(device, password, enabled);
     } else if (password) {
       await this.setGen1WifiApEnabled(device, password, enabled);
@@ -1423,7 +1423,7 @@ class ShellyService extends EventEmitter {
 
     console.log(`[WiFi AP] Setting AP password for ${device.name}`);
 
-    if (device.gen === 2) {
+    if (device.gen >= 2) {
       await this.setGen2WifiApPassword(device, password);
     } else {
       await this.setGen1WifiApPassword(device, password);

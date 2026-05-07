@@ -17,6 +17,6 @@ export class StrategyFactory {
    * @returns DeviceStrategy instance (Gen1 or Gen2)
    */
   static getStrategy(device: Device): DeviceStrategy {
-    return device.gen === 2 ? this.gen2Strategy : this.gen1Strategy;
+    return device.gen >= 2 ? this.gen2Strategy : this.gen1Strategy;
   }
 }
