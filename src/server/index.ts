@@ -1,3 +1,4 @@
+import { closeFileLogging } from './logger.js';
 import express from 'express';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
@@ -112,4 +113,5 @@ process.on('SIGTERM', () => {
   shellyService.disableAutoProvisioning();
   wss.close();
   server.close();
+  closeFileLogging();
 });
