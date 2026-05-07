@@ -73,4 +73,4 @@ No automated testing framework. Manual testing via browser at http://localhost:3
 
 ## Debugging
 
-When investigating backend issues, check `logs/server.log` if it exists — the dev server can be run with `--log-file` (or `SHELLY_LOG_FILE=path`) to persist console output there. Ask the user to restart the server with `pnpm run dev:server -- --log-file` if file logs aren't available yet.
+When investigating backend issues, check `logs/server.log` — the dev server writes all console output there (configured via `SHELLY_LOG_FILE` in `mise.toml`). Ask the user to start/restart the dev server if the log is missing or stale.
