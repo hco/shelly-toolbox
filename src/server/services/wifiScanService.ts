@@ -25,7 +25,7 @@ export interface AccessPointInfo {
 
 export interface ShellyAccessPoint extends AccessPointInfo {
   macAddress: string;
-  gen: 1 | 2;
+  gen: number;
 }
 
 class WifiScanService extends EventEmitter {
@@ -167,7 +167,7 @@ class WifiScanService extends EventEmitter {
     const shellyAPs: ShellyAccessPoint[] = [];
 
     for (const ap of accessPoints) {
-      let gen: 1 | 2 | null = null;
+      let gen: number | null = null;
       let macAddress = '';
 
       if (SHELLY_AP_PATTERN_GEN2.test(ap.ssid)) {

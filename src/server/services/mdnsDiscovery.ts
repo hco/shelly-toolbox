@@ -7,7 +7,7 @@ export interface MdnsDevice {
   type: string;
   ipAddress: string;
   port: number;
-  gen: 1 | 2;
+  gen: number;
 }
 
 class MdnsDiscovery extends EventEmitter {
@@ -91,17 +91,24 @@ class MdnsDiscovery extends EventEmitter {
       return null;
     }
 
-    // Shelly mDNS names are like "shellyplus1-aabbcc" or "shelly1-AABBCC"
-    // Gen2+ devices have "plus", "pro", "mini", "blu", or "g3" in the name
+    // Shelly mDNS names are like "shellyplus1-aabbcc", "shelly1-AABBCC", or "shellyXg4-..."
+    // Heuristic only — the authoritative gen comes from the device's /shelly endpoint.
     const nameLower = service.name.toLowerCase();
-    const isGen2 =
+    const explicitGenMatch = nameLower.match(/g(\d+)(?:-|$)/);
+    let gen: number;
+    if (explicitGenMatch) {
+      gen = parseInt(explicitGenMatch[1], 10);
+    } else if (
       nameLower.includes('plus') ||
       nameLower.includes('pro') ||
       nameLower.includes('mini') ||
-      nameLower.includes('blu') ||
-      nameLower.includes('g3');
+      nameLower.includes('blu')
+    ) {
+      gen = 2;
+    } else {
+      gen = 1;
+    }
 
-    // Extract device type from service name (e.g., "shellyplus1" -> "Shelly Plus 1")
     const type = this.formatDeviceType(service.name);
 
     return {
@@ -110,7 +117,7 @@ class MdnsDiscovery extends EventEmitter {
       type,
       ipAddress,
       port: service.port || 80,
-      gen: isGen2 ? 2 : 1,
+      gen,
     };
   }
 

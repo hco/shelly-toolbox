@@ -21,7 +21,7 @@ export const DeviceSchema = z.object({
   online: z.boolean(),
   lastSeen: z.iso.datetime(),
   capabilities: z.array(DeviceCapabilitySchema),
-  gen: z.union([z.literal(1), z.literal(2)]),
+  gen: z.number().int().min(1).max(9),
   authStatus: AuthStatusSchema,
   // WiFi AP configuration (only available for authenticated devices)
   apEnabled: z.boolean().optional(),
@@ -51,7 +51,7 @@ export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 export const UnprovisionedDeviceSchema = z.object({
   ssid: z.string(),
   macAddress: z.string(),
-  gen: z.union([z.literal(1), z.literal(2)]),
+  gen: z.number().int().min(1).max(9),
   signalStrength: z.number(),
   firstSeen: z.iso.datetime(),
 });

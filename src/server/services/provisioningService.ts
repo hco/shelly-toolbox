@@ -256,8 +256,8 @@ class ProvisioningService extends EventEmitter {
     }
   }
 
-  private async setDevicePassword(password: string, gen: 1 | 2): Promise<void> {
-    if (gen === 2) {
+  private async setDevicePassword(password: string, gen: number): Promise<void> {
+    if (gen >= 2) {
       await this.setGen2Password(password);
     } else {
       await this.setGen1Password(password);
