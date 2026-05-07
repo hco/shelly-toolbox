@@ -6,7 +6,11 @@ import type { ShellyHttpClient } from '../http/ShellyHttpClient.js';
  */
 export interface DeviceOperationContext {
   device: Device;
-  password: string;
+  /**
+   * Password for the configured admin credential. `null` when the device is
+   * unprotected (auth disabled) — in that case requests succeed without auth.
+   */
+  password: string | null;
   httpClient: ShellyHttpClient;
 }
 

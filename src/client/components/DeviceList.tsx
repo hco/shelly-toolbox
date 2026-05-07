@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Badge,
   Button,
@@ -15,8 +15,31 @@ import {
   Menu,
   Box,
   SimpleGrid,
+  TextInput,
+  SegmentedControl,
+  UnstyledButton,
 } from '@mantine/core';
-import { IconLock, IconWifi, IconWifiOff, IconKey, IconRefresh, IconReload, IconAlertTriangle, IconDots, IconLeaf, IconBolt, IconExternalLink, IconBluetooth, IconBluetoothOff, IconNetwork } from '@tabler/icons-react';
+import {
+  IconLock,
+  IconLockOpen,
+  IconWifi,
+  IconWifiOff,
+  IconKey,
+  IconRefresh,
+  IconReload,
+  IconAlertTriangle,
+  IconDots,
+  IconLeaf,
+  IconExternalLink,
+  IconBluetooth,
+  IconBluetoothOff,
+  IconNetwork,
+  IconSearch,
+  IconChevronDown,
+  IconChevronRight,
+  IconX,
+  IconFilter,
+} from '@tabler/icons-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/server/trpc.js';
 import { trpc } from '@/client/utils/trpc.js';
@@ -24,6 +47,10 @@ import type { AuthStatus, UnprovisionedDevice } from '@/shared/types.js';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DevicesOutput = RouterOutputs['onDevices'];
+type Device = DevicesOutput[number];
+
+type GroupBy = 'gen' | 'type' | 'firmware' | 'none';
+type TriState = 'any' | 'on' | 'off';
 
 const AUTH_STATUS_CONFIG: Record<
   AuthStatus,
@@ -57,11 +84,6 @@ const AUTH_STATUS_CONFIG: Record<
   },
 };
 
-/** Convert RSSI (dBm) to a 0-100 percentage. Maps -90 dBm → 0%, -30 dBm → 100%. */
-function rssiToPercent(rssi: number): number {
-  return Math.min(Math.max(((rssi + 90) * 100) / 60, 0), 100);
-}
-
 function rssiColor(rssi: number): string {
   if (rssi >= -50) return 'green';
   if (rssi >= -65) return 'yellow';
@@ -74,6 +96,230 @@ function rssiLabel(rssi: number): string {
   if (rssi >= -65) return 'Good';
   if (rssi >= -75) return 'Fair';
   return 'Weak';
+}
+
+/** Cycle a tri-state filter: any → on → off → any */
+function cycleTri(s: TriState): TriState {
+  return s === 'any' ? 'on' : s === 'on' ? 'off' : 'any';
+}
+
+function groupKey(device: Device, groupBy: GroupBy): string {
+  switch (groupBy) {
+    case 'gen':
+      return `Gen ${device.gen}`;
+    case 'type':
+      return device.type || 'Unknown';
+    case 'firmware':
+      return device.firmwareVersion ?? 'Unknown firmware';
+    case 'none':
+      return 'All devices';
+  }
+}
+
+/** Sort group keys so newer/higher values come first when meaningful. */
+function compareGroupKeys(a: string, b: string, groupBy: GroupBy): number {
+  if (groupBy === 'gen') {
+    const na = parseInt(a.replace(/\D/g, ''), 10) || 0;
+    const nb = parseInt(b.replace(/\D/g, ''), 10) || 0;
+    return nb - na;
+  }
+  if (groupBy === 'firmware') {
+    if (a === 'Unknown firmware') return 1;
+    if (b === 'Unknown firmware') return -1;
+    return b.localeCompare(a, undefined, { numeric: true });
+  }
+  return a.localeCompare(b);
+}
+
+/** Hue derived from a group key, used to tint group headers consistently. */
+function groupHue(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
+}
+
+/** Compact relative-time string: "12s ago", "5m ago", "3h ago", "2d ago" */
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return 'just now';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+type ChipTone = 'soft' | 'warn';
+
+function StatChip({
+  icon,
+  label,
+  color = 'gray',
+  tone = 'soft',
+  onClick,
+  loading,
+  tooltip,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  color?: string;
+  tone?: ChipTone;
+  onClick?: () => void;
+  loading?: boolean;
+  tooltip?: string;
+}) {
+  const interactive = !!onClick && !loading;
+  const bg =
+    tone === 'warn'
+      ? `var(--mantine-color-${color}-1)`
+      : `var(--mantine-color-${color}-0)`;
+  const border = `1px solid var(--mantine-color-${color}-${tone === 'warn' ? 4 : 2})`;
+  const fg = `var(--mantine-color-${color}-${tone === 'warn' ? 9 : 8})`;
+
+  const content = (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '0 8px',
+        height: 24,
+        boxSizing: 'border-box',
+        borderRadius: 6,
+        backgroundColor: bg,
+        border,
+        color: fg,
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: 0.15,
+        lineHeight: 1,
+        whiteSpace: 'nowrap',
+        cursor: interactive ? 'pointer' : 'default',
+        opacity: loading ? 0.5 : 1,
+        transition: 'background-color 140ms, border-color 140ms',
+        userSelect: 'none',
+      }}
+      onClick={interactive ? onClick : undefined}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center' }}>{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+
+  return tooltip ? (
+    <Tooltip label={tooltip} withinPortal>
+      {content}
+    </Tooltip>
+  ) : (
+    content
+  );
+}
+
+function FilterChip({
+  state,
+  onClick,
+  icon,
+  label,
+  color,
+}: {
+  state: TriState;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  color: string;
+}) {
+  const isActive = state !== 'any';
+  const isOn = state === 'on';
+  const tooltip =
+    state === 'any'
+      ? `Click to show only devices with ${label} ON`
+      : isOn
+      ? `Showing only ${label} ON · click to switch to OFF only`
+      : `Showing only ${label} OFF · click to clear`;
+
+  // Status indicator stays in a fixed-width slot so the chip never resizes.
+  let statusText = 'ANY';
+  let statusBg = 'var(--mantine-color-gray-2)';
+  let statusFg = 'var(--mantine-color-gray-7)';
+  if (state === 'on') {
+    statusText = 'ON';
+    statusBg = `var(--mantine-color-${color}-6)`;
+    statusFg = 'white';
+  } else if (state === 'off') {
+    statusText = 'OFF';
+    statusBg = 'var(--mantine-color-gray-7)';
+    statusFg = 'white';
+  }
+
+  return (
+    <Tooltip label={tooltip} withinPortal>
+      <UnstyledButton
+        onClick={onClick}
+        aria-label={`Filter by ${label}: ${statusText.toLowerCase()}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '0 5px 0 12px',
+          height: 32,
+          boxSizing: 'border-box',
+          borderRadius: 999,
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: 0.3,
+          textTransform: 'uppercase',
+          transition: 'border-color 160ms ease, background-color 160ms ease, color 160ms ease',
+          border: `1px solid var(--mantine-color-${
+            isActive ? color : 'gray'
+          }-${isActive ? 4 : 3})`,
+          backgroundColor: isActive
+            ? `var(--mantine-color-${color}-0)`
+            : 'var(--mantine-color-body)',
+          color: isActive
+            ? `var(--mantine-color-${color}-8)`
+            : 'var(--mantine-color-gray-7)',
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>{icon}</span>
+        <span>{label}</span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 44,
+            height: 22,
+            boxSizing: 'border-box',
+            borderRadius: 999,
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            backgroundColor: statusBg,
+            color: statusFg,
+            transition: 'background-color 160ms ease, color 160ms ease',
+            flexShrink: 0,
+          }}
+        >
+          {statusText}
+        </span>
+      </UnstyledButton>
+    </Tooltip>
+  );
 }
 
 export function DeviceList() {
@@ -91,6 +337,14 @@ export function DeviceList() {
   const [resettingDevice, setResettingDevice] = useState<string | null>(null);
   const [refreshingDevice, setRefreshingDevice] = useState<string | null>(null);
 
+  // View controls
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [search, setSearch] = useState('');
+  const [filterAp, setFilterAp] = useState<TriState>('any');
+  const [filterPwd, setFilterPwd] = useState<TriState>('any');
+  const [filterBle, setFilterBle] = useState<TriState>('any');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
   const provisionDeviceMutation = trpc.provisionDevice.useMutation();
@@ -104,10 +358,22 @@ export function DeviceList() {
   const { data: autoProvisioningStatus } = trpc.getAutoProvisioningStatus.useQuery();
   const { data: provisioningWifi } = trpc.getProvisioningWifi.useQuery();
 
-  // Subscribe to unprovisioned devices
   trpc.onUnprovisionedDevices.useSubscription(undefined, {
     onData(data) {
       setUnprovisionedDevices(data);
+    },
+  });
+
+  trpc.onDevices.useSubscription(undefined, {
+    onStarted() {
+      setError(null);
+    },
+    onData(data) {
+      setDevices(data);
+      setHasInitialData(true);
+    },
+    onError(err) {
+      setError(err.message);
     },
   });
 
@@ -127,19 +393,6 @@ export function DeviceList() {
       }
     );
   };
-
-  trpc.onDevices.useSubscription(undefined, {
-    onStarted() {
-      setError(null);
-    },
-    onData(data) {
-      setDevices(data);
-      setHasInitialData(true);
-    },
-    onError(err) {
-      setError(err.message);
-    },
-  });
 
   const handleDiscoverDevices = () => {
     setError(null);
@@ -269,14 +522,143 @@ export function DeviceList() {
     );
   };
 
+  const toggleGroupCollapsed = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setFilterAp('any');
+    setFilterPwd('any');
+    setFilterBle('any');
+  };
+
   const isInitialLoading =
     !hasInitialData || discoverDevicesMutation.status === 'pending';
 
-  const renderDeviceCard = (device: DevicesOutput[number]) => {
-    const securityConfig = AUTH_STATUS_CONFIG[device.authStatus];
-    const hasWifiInfo = device.gen === 2 && device.wifiRssi !== undefined;
-    const hasEthInfo = device.gen === 2 && device.ethConnected === true;
-    const hasApInfo = device.authStatus === 'correct_password' && device.apEnabled !== undefined;
+  // Filter pipeline
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return devices.filter((d) => {
+      if (q) {
+        const hay = `${d.name} ${d.id} ${d.ipAddress} ${d.type}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filterAp !== 'any') {
+        const want = filterAp === 'on';
+        if (d.apEnabled === undefined) return false;
+        if (d.apEnabled !== want) return false;
+      }
+      if (filterPwd !== 'any') {
+        const wantProtected = filterPwd === 'on';
+        const isProtected =
+          d.authStatus === 'correct_password' ||
+          d.authStatus === 'different_password';
+        if (isProtected !== wantProtected) return false;
+      }
+      if (filterBle !== 'any') {
+        const want = filterBle === 'on';
+        if (d.bleEnabled === undefined) return false;
+        if (d.bleEnabled !== want) return false;
+      }
+      return true;
+    });
+  }, [devices, search, filterAp, filterPwd, filterBle]);
+
+  // Group pipeline
+  const grouped = useMemo(() => {
+    const map = new Map<string, Device[]>();
+    for (const d of filtered) {
+      const key = groupKey(d, groupBy);
+      const arr = map.get(key);
+      if (arr) arr.push(d);
+      else map.set(key, [d]);
+    }
+    return Array.from(map.entries())
+      .map(([key, list]) => ({
+        key,
+        devices: list.sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => compareGroupKeys(a.key, b.key, groupBy));
+  }, [filtered, groupBy]);
+
+  const totalCount = devices.length;
+  const filteredCount = filtered.length;
+  const onlineCount = devices.filter((d) => d.online).length;
+  const filtersActive =
+    !!search || filterAp !== 'any' || filterPwd !== 'any' || filterBle !== 'any';
+
+  const renderDeviceCard = (device: Device) => {
+    const accent = device.online ? 'teal' : 'gray';
+
+    const isUnprotected = device.authStatus === 'unprotected';
+    const isAuthenticated = device.authStatus === 'correct_password';
+    const hasWifiInfo = device.gen >= 2 && device.wifiRssi !== undefined;
+    const hasEthInfo = device.gen >= 2 && device.ethConnected === true;
+    const hasApInfo = (isAuthenticated || isUnprotected) && device.apEnabled !== undefined;
+    const apOpen = !!(device.apEnabled && device.apIsOpen);
+
+    // Security chip is clickable when we can fix the issue inline.
+    const securityClickable =
+      isUnprotected && device.online && !!passwordData?.hasPassword;
+
+    let securityChip: React.ReactNode = null;
+    if (device.authStatus === 'unknown') {
+      securityChip = (
+        <StatChip
+          icon={<IconLock size={11} />}
+          label="Auth unknown"
+          color="gray"
+          tooltip={AUTH_STATUS_CONFIG.unknown.tooltip}
+        />
+      );
+    } else if (isUnprotected) {
+      securityChip = (
+        <StatChip
+          icon={<IconLockOpen size={11} />}
+          label="No password"
+          color="orange"
+          tone="warn"
+          loading={settingPasswordFor === device.id}
+          onClick={
+            securityClickable
+              ? () => handleSetDevicePassword(device.id)
+              : undefined
+          }
+          tooltip={
+            securityClickable
+              ? 'Click to set the configured password on this device'
+              : passwordData?.hasPassword
+              ? AUTH_STATUS_CONFIG.unprotected.tooltip
+              : 'No password configured — set one in Settings to fix'
+          }
+        />
+      );
+    } else if (device.authStatus === 'correct_password') {
+      securityChip = (
+        <StatChip
+          icon={<IconLock size={11} />}
+          label="Protected"
+          color="teal"
+          tooltip={AUTH_STATUS_CONFIG.correct_password.tooltip}
+        />
+      );
+    } else {
+      securityChip = (
+        <StatChip
+          icon={<IconKey size={11} />}
+          label="Other password"
+          color="yellow"
+          tone="warn"
+          tooltip={AUTH_STATUS_CONFIG.different_password.tooltip}
+        />
+      );
+    }
 
     return (
       <Card
@@ -284,42 +666,48 @@ export function DeviceList() {
         withBorder
         radius="md"
         padding="md"
+        className="device-card"
         style={{
-          borderLeft: `3px solid var(--mantine-color-${device.online ? 'green' : 'gray'}-4)`,
+          position: 'relative',
+          overflow: 'hidden',
+          borderLeft: `3px solid var(--mantine-color-${
+            device.online ? accent : 'gray'
+          }-${device.online ? 5 : 3})`,
+          transition: 'transform 160ms ease, box-shadow 160ms ease',
         }}
       >
-        {/* Header: Name + Actions */}
-        <Group justify="space-between" wrap="nowrap" gap="sm">
+        {/* Header: dot + name + actions */}
+        <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
           <Box style={{ minWidth: 0, flex: 1 }}>
-            <Text fw={600} size="sm" truncate>
-              {device.name}
-            </Text>
-            <Text size="xs" c="dimmed">
+            <Group gap={8} wrap="nowrap" align="center">
+              <Box
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: device.online
+                    ? `var(--mantine-color-${accent}-5)`
+                    : 'var(--mantine-color-gray-4)',
+                  flexShrink: 0,
+                  animation: device.online ? 'devicePulse 2.4s ease-in-out infinite' : undefined,
+                }}
+              />
+              <Text fw={650} size="sm" truncate style={{ letterSpacing: -0.1 }}>
+                {device.name}
+              </Text>
+            </Group>
+            <Text
+              size="xs"
+              c="dimmed"
+              mt={4}
+              truncate
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
               {device.type} &middot; {device.ipAddress}
               {device.firmwareVersion && <> &middot; fw {device.firmwareVersion}</>}
             </Text>
           </Box>
-          <Group gap={4} wrap="nowrap">
-            {device.authStatus === 'unprotected' && device.online && (
-              <Tooltip
-                label={
-                  passwordData?.hasPassword
-                    ? 'Set configured password on this device'
-                    : 'Configure a password in Settings first'
-                }
-              >
-                <ActionIcon
-                  variant="filled"
-                  color="orange"
-                  size="sm"
-                  onClick={() => handleSetDevicePassword(device.id)}
-                  loading={settingPasswordFor === device.id}
-                  disabled={!passwordData?.hasPassword}
-                >
-                  <IconLock size={14} />
-                </ActionIcon>
-              </Tooltip>
-            )}
+          <Group gap={2} wrap="nowrap">
             <Tooltip label="Refresh device status">
               <ActionIcon
                 variant="subtle"
@@ -347,6 +735,41 @@ export function DeviceList() {
                 >
                   Open Web UI
                 </Menu.Item>
+                {securityClickable && (
+                  <Menu.Item
+                    leftSection={<IconLock size={14} />}
+                    color="orange"
+                    onClick={() => handleSetDevicePassword(device.id)}
+                    disabled={settingPasswordFor === device.id}
+                  >
+                    Set device password
+                  </Menu.Item>
+                )}
+                {hasApInfo && (
+                  <Menu.Item
+                    leftSection={
+                      device.apEnabled ? (
+                        <IconWifiOff size={14} />
+                      ) : (
+                        <IconWifi size={14} />
+                      )
+                    }
+                    onClick={() => handleToggleWifiAp(device.id, device.apEnabled!)}
+                    disabled={togglingApFor === device.id}
+                  >
+                    {device.apEnabled ? 'Disable WiFi AP' : 'Enable WiFi AP'}
+                  </Menu.Item>
+                )}
+                {hasApInfo && apOpen && (
+                  <Menu.Item
+                    leftSection={<IconKey size={14} />}
+                    color="orange"
+                    onClick={() => handleSetWifiApPassword(device.id)}
+                    disabled={settingApPasswordFor === device.id}
+                  >
+                    Set AP password
+                  </Menu.Item>
+                )}
                 <Menu.Divider />
                 <Menu.Item
                   leftSection={<IconReload size={14} />}
@@ -368,144 +791,108 @@ export function DeviceList() {
           </Group>
         </Group>
 
-        {/* Status badges row */}
-        <Group gap={6} mt="sm" wrap="wrap">
-          <Badge
-            color={device.online ? 'green' : 'gray'}
-            variant="light"
-            size="sm"
-          >
-            {device.online ? 'Online' : 'Offline'}
-          </Badge>
-          {device.gen === 2 && device.ecoMode !== undefined && (
-            <Tooltip label={device.ecoMode ? 'Eco mode enabled' : 'Eco mode disabled'}>
-              <Badge
-                color={device.ecoMode ? 'teal' : 'gray'}
-                variant="light"
-                size="sm"
-                leftSection={device.ecoMode ? <IconLeaf size={10} /> : <IconBolt size={10} />}
-              >
-                {device.ecoMode ? 'Eco' : 'Perf'}
-              </Badge>
-            </Tooltip>
+        {/* Unified stat strip — same shape for every card */}
+        <Group gap={5} mt="sm" wrap="wrap">
+          <StatChip
+            icon={
+              <Box
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: device.online
+                    ? `var(--mantine-color-${accent}-6)`
+                    : 'var(--mantine-color-gray-5)',
+                }}
+              />
+            }
+            label={device.online ? 'Online' : 'Offline'}
+            color={device.online ? accent : 'gray'}
+          />
+          {securityChip}
+          {hasEthInfo && (
+            <StatChip
+              icon={<IconNetwork size={11} />}
+              label="Ethernet"
+              color="indigo"
+              tooltip="Connected via Ethernet"
+            />
           )}
-          {device.gen === 2 && device.bleEnabled !== undefined && (
-            <Tooltip label={device.bleEnabled ? 'Click to disable Bluetooth' : 'Click to enable Bluetooth'}>
-              <Badge
-                color={device.bleEnabled ? 'blue' : 'gray'}
-                variant="light"
-                size="sm"
-                leftSection={device.bleEnabled ? <IconBluetooth size={10} /> : <IconBluetoothOff size={10} />}
-                style={{ cursor: 'pointer' }}
-                onClick={() => handleToggleBle(device.id, device.bleEnabled!)}
-                opacity={togglingBleFor === device.id ? 0.5 : 1}
-              >
-                {device.bleEnabled ? 'BLE' : 'No BLE'}
-              </Badge>
-            </Tooltip>
+          {hasWifiInfo && (
+            <StatChip
+              icon={<IconWifi size={11} />}
+              label={`${device.wifiRssi} dBm`}
+              color={rssiColor(device.wifiRssi!)}
+              tooltip={`WiFi signal: ${rssiLabel(device.wifiRssi!)} (${device.wifiRssi} dBm)`}
+            />
           )}
-          <Tooltip label={securityConfig.tooltip}>
-            <Badge
-              color={securityConfig.color}
-              variant={securityConfig.variant as 'light' | 'filled'}
-              size="sm"
-            >
-              {securityConfig.label}
-            </Badge>
-          </Tooltip>
+          {device.gen >= 2 && device.bleEnabled !== undefined && (
+            <StatChip
+              icon={
+                device.bleEnabled ? (
+                  <IconBluetooth size={11} />
+                ) : (
+                  <IconBluetoothOff size={11} />
+                )
+              }
+              label={device.bleEnabled ? 'BLE' : 'BLE off'}
+              color={device.bleEnabled ? 'blue' : 'gray'}
+              loading={togglingBleFor === device.id}
+              onClick={() => handleToggleBle(device.id, device.bleEnabled!)}
+              tooltip={
+                device.bleEnabled
+                  ? 'Bluetooth enabled — click to disable'
+                  : 'Bluetooth disabled — click to enable'
+              }
+            />
+          )}
+          {hasApInfo && (
+            <StatChip
+              icon={
+                device.apEnabled ? (
+                  <IconWifi size={11} />
+                ) : (
+                  <IconWifiOff size={11} />
+                )
+              }
+              label={
+                !device.apEnabled
+                  ? 'AP off'
+                  : apOpen
+                  ? 'AP open'
+                  : 'AP secured'
+              }
+              color={!device.apEnabled ? 'gray' : apOpen ? 'orange' : 'teal'}
+              tone={apOpen ? 'warn' : 'soft'}
+              loading={togglingApFor === device.id}
+              onClick={() => handleToggleWifiAp(device.id, device.apEnabled!)}
+              tooltip={
+                !device.apEnabled
+                  ? 'WiFi AP disabled — click to enable'
+                  : apOpen
+                  ? 'WiFi AP enabled with no password — click to disable, or set a password from the menu'
+                  : 'WiFi AP enabled and password-protected — click to disable'
+              }
+            />
+          )}
+          {device.gen >= 2 && device.ecoMode === true && (
+            <StatChip
+              icon={<IconLeaf size={11} />}
+              label="Eco"
+              color="teal"
+              tooltip="Eco mode enabled"
+            />
+          )}
         </Group>
 
-        {/* Detail row: Connection + AP info */}
-        {(hasWifiInfo || hasEthInfo || hasApInfo) && (
-          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="sm">
-            {hasEthInfo && (
-              <Box>
-                <Text size="xs" c="dimmed" mb={4}>Connection</Text>
-                <Group gap="xs" wrap="nowrap">
-                  <IconNetwork size={14} color="var(--mantine-color-blue-5)" />
-                  <Text size="xs">Ethernet</Text>
-                </Group>
-              </Box>
-            )}
-            {hasWifiInfo && (
-              <Box>
-                <Text size="xs" c="dimmed" mb={4}>WiFi Signal</Text>
-                <Tooltip label={`${rssiLabel(device.wifiRssi!)} (${device.wifiRssi} dBm)`}>
-                  <Group gap="xs" wrap="nowrap">
-                    <Progress
-                      value={rssiToPercent(device.wifiRssi!)}
-                      size={6}
-                      w={60}
-                      color={rssiColor(device.wifiRssi!)}
-                      radius="xl"
-                    />
-                    <Text size="xs" c="dimmed">
-                      {device.wifiRssi} dBm
-                    </Text>
-                  </Group>
-                </Tooltip>
-              </Box>
-            )}
-            {hasApInfo && (
-              <Box>
-                <Text size="xs" c="dimmed" mb={4}>WiFi AP</Text>
-                <Group gap={6} wrap="wrap">
-                  <Tooltip
-                    label={
-                      device.apEnabled
-                        ? device.apIsOpen
-                          ? 'AP is enabled but has no password'
-                          : 'AP is enabled and protected'
-                        : 'AP is disabled'
-                    }
-                  >
-                    <Badge
-                      size="sm"
-                      color={
-                        !device.apEnabled
-                          ? 'gray'
-                          : device.apIsOpen
-                          ? 'orange'
-                          : 'green'
-                      }
-                      variant={device.apEnabled && device.apIsOpen ? 'filled' : 'light'}
-                    >
-                      {device.apEnabled ? (device.apIsOpen ? 'Open' : 'Protected') : 'Disabled'}
-                    </Badge>
-                  </Tooltip>
-                  <Tooltip label={device.apEnabled ? 'Disable WiFi AP' : 'Enable WiFi AP'}>
-                    <ActionIcon
-                      variant="subtle"
-                      color={device.apEnabled ? 'red' : 'green'}
-                      size="xs"
-                      onClick={() => handleToggleWifiAp(device.id, device.apEnabled!)}
-                      loading={togglingApFor === device.id}
-                    >
-                      {device.apEnabled ? <IconWifiOff size={12} /> : <IconWifi size={12} />}
-                    </ActionIcon>
-                  </Tooltip>
-                  {device.apEnabled && device.apIsOpen && (
-                    <Tooltip label="Set AP password (same as device password)">
-                      <ActionIcon
-                        variant="filled"
-                        color="orange"
-                        size="xs"
-                        onClick={() => handleSetWifiApPassword(device.id)}
-                        loading={settingApPasswordFor === device.id}
-                      >
-                        <IconKey size={12} />
-                      </ActionIcon>
-                    </Tooltip>
-                  )}
-                </Group>
-              </Box>
-            )}
-          </SimpleGrid>
-        )}
-
-        {/* Footer: Last seen */}
-        <Text size="xs" c="dimmed" mt="sm">
-          Last seen {new Date(device.lastSeen).toLocaleString()}
+        {/* Footer: relative last-seen */}
+        <Text
+          size="xs"
+          c="dimmed"
+          mt="sm"
+          style={{ fontVariantNumeric: 'tabular-nums', fontSize: 11 }}
+        >
+          {device.online ? 'Last seen' : 'Last seen'} {relativeTime(device.lastSeen)}
         </Text>
       </Card>
     );
@@ -513,17 +900,135 @@ export function DeviceList() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" wrap="wrap" gap="sm">
+      <style>{`
+        @keyframes devicePulse {
+          0%, 100% { box-shadow: 0 0 0 4px var(--mantine-color-teal-1); }
+          50% { box-shadow: 0 0 0 6px var(--mantine-color-teal-2); }
+        }
+        .device-card:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.12);
+        }
+        .group-header-sticky {
+          position: sticky;
+          top: 0;
+          z-index: 5;
+          backdrop-filter: saturate(140%) blur(8px);
+          -webkit-backdrop-filter: saturate(140%) blur(8px);
+        }
+      `}</style>
+
+      <Group justify="space-between" wrap="wrap" gap="sm" align="flex-end">
         <div>
           <Title order={2}>Devices</Title>
           <Text c="dimmed" size="sm">
-            Live list of Shelly devices discovered on your local network.
+            <Text span fw={600} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {onlineCount}
+            </Text>{' '}
+            online &middot;{' '}
+            <Text span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {totalCount}
+            </Text>{' '}
+            total
+            {filtersActive && (
+              <>
+                {' '}
+                &middot;{' '}
+                <Text span fw={600} c="violet.6" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {filteredCount}
+                </Text>{' '}
+                shown
+              </>
+            )}
           </Text>
         </div>
         <Button onClick={handleDiscoverDevices} loading={isInitialLoading}>
           Discover devices
         </Button>
       </Group>
+
+      {/* Toolbar: search + group + filters */}
+      <Card withBorder radius="md" padding="sm">
+        <Stack gap="xs">
+          {/* Row 1: search + group-by */}
+          <Group gap="sm" wrap="wrap" align="center">
+            <TextInput
+              placeholder="Search name, IP, type…"
+              leftSection={<IconSearch size={14} />}
+              rightSection={
+                search ? (
+                  <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => setSearch('')}>
+                    <IconX size={12} />
+                  </ActionIcon>
+                ) : null
+              }
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              size="sm"
+              style={{ flex: '1 1 240px', minWidth: 220 }}
+            />
+            <Group gap={8} wrap="nowrap" align="center">
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>
+                Group by
+              </Text>
+              <SegmentedControl
+                size="xs"
+                value={groupBy}
+                onChange={(v) => setGroupBy(v as GroupBy)}
+                data={[
+                  { value: 'none', label: 'None' },
+                  { value: 'gen', label: 'Generation' },
+                  { value: 'type', label: 'Type' },
+                  { value: 'firmware', label: 'Firmware' },
+                ]}
+              />
+            </Group>
+          </Group>
+          {/* Row 2: filters */}
+          <Group gap={8} wrap="wrap" align="center">
+            <Group gap={6} wrap="nowrap" align="center">
+              <IconFilter size={14} color="var(--mantine-color-gray-6)" />
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>
+                Filters
+              </Text>
+            </Group>
+            <FilterChip
+              state={filterAp}
+              onClick={() => setFilterAp(cycleTri(filterAp))}
+              icon={<IconWifi size={12} />}
+              label="AP"
+              color="orange"
+            />
+            <FilterChip
+              state={filterPwd}
+              onClick={() => setFilterPwd(cycleTri(filterPwd))}
+              icon={<IconLock size={12} />}
+              label="Password"
+              color="green"
+            />
+            <FilterChip
+              state={filterBle}
+              onClick={() => setFilterBle(cycleTri(filterBle))}
+              icon={<IconBluetooth size={12} />}
+              label="BLE"
+              color="blue"
+            />
+            {filtersActive && (
+              <Tooltip label="Clear filters and search">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="md"
+                  onClick={clearFilters}
+                  aria-label="Clear filters"
+                >
+                  <IconX size={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
+        </Stack>
+      </Card>
 
       {error && (
         <Card withBorder padding="sm" radius="md" bg="red.0">
@@ -547,11 +1052,79 @@ export function DeviceList() {
         </Card>
       )}
 
-      {devices.length > 0 && (
-        <Stack gap="sm">
-          {devices.map(renderDeviceCard)}
-        </Stack>
+      {hasInitialData && devices.length > 0 && filtered.length === 0 && (
+        <Card withBorder radius="md" padding="lg">
+          <Stack gap="xs" align="center">
+            <IconFilter size={24} color="var(--mantine-color-gray-5)" />
+            <Text c="dimmed" size="sm" ta="center">
+              No devices match the current filters.
+            </Text>
+            <Button variant="subtle" size="xs" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          </Stack>
+        </Card>
       )}
+
+      {groupBy === 'none' && grouped.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+          {grouped[0].devices.map(renderDeviceCard)}
+        </SimpleGrid>
+      )}
+
+      {groupBy !== 'none' &&
+        grouped.map((group) => {
+          const collapsed = collapsedGroups.has(group.key);
+          const hue = groupHue(group.key);
+          return (
+            <Box key={group.key}>
+              <UnstyledButton
+                onClick={() => toggleGroupCollapsed(group.key)}
+                className="group-header-sticky"
+                style={{
+                  display: 'flex',
+                  width: '100%',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  marginBottom: 10,
+                  background: `linear-gradient(90deg,
+                    hsla(${hue}, 80%, 96%, 0.92) 0%,
+                    hsla(${hue}, 80%, 99%, 0.85) 100%)`,
+                  border: `1px solid hsla(${hue}, 60%, 80%, 0.6)`,
+                  cursor: 'pointer',
+                }}
+              >
+                {collapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+                <Text fw={700} size="sm" style={{ letterSpacing: 0.2, color: `hsl(${hue}, 50%, 25%)` }}>
+                  {group.key}
+                </Text>
+                <Badge
+                  size="sm"
+                  radius="sm"
+                  variant="filled"
+                  style={{
+                    background: `hsl(${hue}, 55%, 45%)`,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {group.devices.length}
+                </Badge>
+                <Box style={{ flex: 1 }} />
+                <Text size="xs" c="dimmed">
+                  {group.devices.filter((d) => d.online).length} online
+                </Text>
+              </UnstyledButton>
+
+              {!collapsed && (
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+                  {group.devices.map(renderDeviceCard)}
+                </SimpleGrid>
+              )}
+            </Box>
+          );
+        })}
 
       {/* Unprovisioned Devices Section */}
       {autoProvisioningStatus?.enabled && unprovisionedDevices.length > 0 && (

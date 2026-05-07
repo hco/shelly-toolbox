@@ -26,7 +26,10 @@ export function ScriptDeployModal({ opened, onClose, scriptId, scriptName, devic
   const deployableDevices = useMemo(
     () =>
       devices.filter(
-        (d) => d.online && d.gen === 2 && d.authStatus === 'correct_password'
+        (d) =>
+          d.online &&
+          d.gen === 2 &&
+          (d.authStatus === 'correct_password' || d.authStatus === 'unprotected')
       ),
     [devices]
   );

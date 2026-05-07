@@ -28,6 +28,11 @@ async function gen2Rpc<T = unknown>(
   let response = await ctx.httpClient.post(url, body, {}, 10000);
 
   if (response.status === 401) {
+    if (ctx.password === null) {
+      throw new Error(
+        `Device ${ctx.device.name} requires auth but no password is configured`
+      );
+    }
     const wwwAuth = response.headers.get('WWW-Authenticate');
     if (!wwwAuth) {
       throw new Error(

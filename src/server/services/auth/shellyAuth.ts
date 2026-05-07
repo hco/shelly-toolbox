@@ -15,7 +15,10 @@ export class ShellyAuthHelper {
   /**
    * Create Basic Auth header for Gen1 devices
    */
-  static createBasicAuthHeader(password: string): string {
+  static createBasicAuthHeader(password: string | null): string {
+    if (password === null) {
+      throw new Error('Cannot create Basic auth header without a password');
+    }
     const credentials = Buffer.from(`admin:${password}`).toString('base64');
     return `Basic ${credentials}`;
   }
@@ -95,10 +98,13 @@ export class ShellyAuthHelper {
   static async getAuthHeaders(
     httpClient: ShellyHttpClient,
     device: Device,
-    password: string,
+    password: string | null,
     uri: string,
     method: 'GET' | 'POST' = 'GET'
   ): Promise<Record<string, string> | null> {
+    if (password === null) {
+      return null;
+    }
     if (device.gen === 2) {
       // Gen2: Fetch challenge and create digest auth header
       const challenge = await this.fetchGen2AuthChallenge(
