@@ -217,6 +217,10 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  refreshAllOnlineDevices: protectedProcedure.mutation(async () => {
+    return shellyService.refreshAllOnlineDevices();
+  }),
+
   discoverDevices: protectedProcedure.mutation(async () => {
     return shellyService.startDiscovery();
   }),

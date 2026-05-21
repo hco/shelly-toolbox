@@ -1152,6 +1152,12 @@ class ShellyService extends EventEmitter {
     await this.fetchAuthStatus(device);
   }
 
+  async refreshAllOnlineDevices(): Promise<{ refreshed: number }> {
+    const devices = Array.from(this.devices.values()).filter((d) => d.online);
+    await Promise.all(devices.map((device) => this.fetchAuthStatus(device)));
+    return { refreshed: devices.length };
+  }
+
   // Re-check auth status for all devices (called when password config changes)
   async recheckAllAuthStatus(): Promise<void> {
     const devices = Array.from(this.devices.values());

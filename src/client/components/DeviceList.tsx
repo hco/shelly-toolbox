@@ -359,6 +359,7 @@ export function DeviceList() {
   const rebootDeviceMutation = trpc.rebootDevice.useMutation();
   const factoryResetDeviceMutation = trpc.factoryResetDevice.useMutation();
   const refreshDeviceStatusMutation = trpc.refreshDeviceStatus.useMutation();
+  const refreshAllOnlineDevicesMutation = trpc.refreshAllOnlineDevices.useMutation();
   const { data: passwordData } = trpc.getShellyPassword.useQuery();
   const { data: autoProvisioningStatus } = trpc.getAutoProvisioningStatus.useQuery();
   const { data: provisioningWifi } = trpc.getProvisioningWifi.useQuery();
@@ -402,6 +403,15 @@ export function DeviceList() {
   const handleDiscoverDevices = () => {
     setError(null);
     discoverDevicesMutation.mutate(undefined, {
+      onError(err) {
+        setError(err.message);
+      },
+    });
+  };
+
+  const handleRefreshAllOnline = () => {
+    setError(null);
+    refreshAllOnlineDevicesMutation.mutate(undefined, {
       onError(err) {
         setError(err.message);
       },
@@ -994,9 +1004,22 @@ export function DeviceList() {
             )}
           </Text>
         </div>
-        <Button onClick={handleDiscoverDevices} loading={isInitialLoading}>
-          Discover devices
-        </Button>
+        <Group gap="xs">
+          <Tooltip label={onlineCount === 0 ? 'No online devices to refresh' : `Re-fetch status for ${onlineCount} online ${onlineCount === 1 ? 'device' : 'devices'}`}>
+            <Button
+              variant="default"
+              leftSection={<IconRefresh size={14} />}
+              onClick={handleRefreshAllOnline}
+              loading={refreshAllOnlineDevicesMutation.status === 'pending'}
+              disabled={onlineCount === 0}
+            >
+              Refresh online
+            </Button>
+          </Tooltip>
+          <Button onClick={handleDiscoverDevices} loading={isInitialLoading}>
+            Discover devices
+          </Button>
+        </Group>
       </Group>
 
       {/* Toolbar: search + group + filters */}
