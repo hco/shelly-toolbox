@@ -155,6 +155,14 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  // Cloud management (protected)
+  setCloudEnabled: protectedProcedure
+    .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ input }) => {
+      await shellyService.setCloudEnabled(input.deviceId, input.enabled);
+      return { success: true };
+    }),
+
   // WiFi AP management (protected)
   setWifiApEnabled: protectedProcedure
     .input(z.object({ deviceId: z.string(), enabled: z.boolean() }))

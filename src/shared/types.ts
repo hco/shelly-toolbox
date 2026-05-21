@@ -31,6 +31,7 @@ export const DeviceSchema = z.object({
   wifiRssi: z.number().optional(), // dBm, e.g. -45
   ethConnected: z.boolean().optional(),
   bleEnabled: z.boolean().optional(),
+  cloudEnabled: z.boolean().optional(),
   // Device info (fetched from /shelly endpoint)
   firmwareVersion: z.string().optional(),
 });

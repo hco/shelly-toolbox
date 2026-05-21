@@ -33,6 +33,8 @@ import {
   IconExternalLink,
   IconBluetooth,
   IconBluetoothOff,
+  IconCloud,
+  IconCloudOff,
   IconNetwork,
   IconSearch,
   IconChevronDown,
@@ -331,6 +333,7 @@ export function DeviceList() {
   const [provisioningDevice, setProvisioningDevice] = useState<string | null>(null);
 
   const [togglingBleFor, setTogglingBleFor] = useState<string | null>(null);
+  const [togglingCloudFor, setTogglingCloudFor] = useState<string | null>(null);
   const [togglingApFor, setTogglingApFor] = useState<string | null>(null);
   const [settingApPasswordFor, setSettingApPasswordFor] = useState<string | null>(null);
   const [rebootingDevice, setRebootingDevice] = useState<string | null>(null);
@@ -343,12 +346,14 @@ export function DeviceList() {
   const [filterAp, setFilterAp] = useState<TriState>('any');
   const [filterPwd, setFilterPwd] = useState<TriState>('any');
   const [filterBle, setFilterBle] = useState<TriState>('any');
+  const [filterCloud, setFilterCloud] = useState<TriState>('any');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const discoverDevicesMutation = trpc.discoverDevices.useMutation();
   const setDevicePasswordMutation = trpc.setDevicePassword.useMutation();
   const provisionDeviceMutation = trpc.provisionDevice.useMutation();
   const setBleEnabledMutation = trpc.setBleEnabled.useMutation();
+  const setCloudEnabledMutation = trpc.setCloudEnabled.useMutation();
   const setWifiApEnabledMutation = trpc.setWifiApEnabled.useMutation();
   const setWifiApPasswordMutation = trpc.setWifiApPassword.useMutation();
   const rebootDeviceMutation = trpc.rebootDevice.useMutation();
@@ -432,6 +437,23 @@ export function DeviceList() {
         onError(err) {
           setError(err.message);
           setTogglingBleFor(null);
+        },
+      }
+    );
+  };
+
+  const handleToggleCloud = (deviceId: string, currentEnabled: boolean) => {
+    setTogglingCloudFor(deviceId);
+    setError(null);
+    setCloudEnabledMutation.mutate(
+      { deviceId, enabled: !currentEnabled },
+      {
+        onSuccess() {
+          setTogglingCloudFor(null);
+        },
+        onError(err) {
+          setError(err.message);
+          setTogglingCloudFor(null);
         },
       }
     );
@@ -536,6 +558,7 @@ export function DeviceList() {
     setFilterAp('any');
     setFilterPwd('any');
     setFilterBle('any');
+    setFilterCloud('any');
   };
 
   const isInitialLoading =
@@ -566,9 +589,14 @@ export function DeviceList() {
         if (d.bleEnabled === undefined) return false;
         if (d.bleEnabled !== want) return false;
       }
+      if (filterCloud !== 'any') {
+        const want = filterCloud === 'on';
+        if (d.cloudEnabled === undefined) return false;
+        if (d.cloudEnabled !== want) return false;
+      }
       return true;
     });
-  }, [devices, search, filterAp, filterPwd, filterBle]);
+  }, [devices, search, filterAp, filterPwd, filterBle, filterCloud]);
 
   // Group pipeline
   const grouped = useMemo(() => {
@@ -591,7 +619,11 @@ export function DeviceList() {
   const filteredCount = filtered.length;
   const onlineCount = devices.filter((d) => d.online).length;
   const filtersActive =
-    !!search || filterAp !== 'any' || filterPwd !== 'any' || filterBle !== 'any';
+    !!search ||
+    filterAp !== 'any' ||
+    filterPwd !== 'any' ||
+    filterBle !== 'any' ||
+    filterCloud !== 'any';
 
   const renderDeviceCard = (device: Device) => {
     const accent = device.online ? 'teal' : 'gray';
@@ -846,6 +878,26 @@ export function DeviceList() {
               }
             />
           )}
+          {device.gen >= 2 && device.cloudEnabled !== undefined && (
+            <StatChip
+              icon={
+                device.cloudEnabled ? (
+                  <IconCloud size={11} />
+                ) : (
+                  <IconCloudOff size={11} />
+                )
+              }
+              label={device.cloudEnabled ? 'Cloud' : 'Cloud off'}
+              color={device.cloudEnabled ? 'cyan' : 'gray'}
+              loading={togglingCloudFor === device.id}
+              onClick={() => handleToggleCloud(device.id, device.cloudEnabled!)}
+              tooltip={
+                device.cloudEnabled
+                  ? 'Registered with Shelly Cloud — click to disconnect this device from the cloud'
+                  : 'Not connected to Shelly Cloud — click to enable'
+              }
+            />
+          )}
           {hasApInfo && (
             <StatChip
               icon={
@@ -1012,6 +1064,13 @@ export function DeviceList() {
               icon={<IconBluetooth size={12} />}
               label="BLE"
               color="blue"
+            />
+            <FilterChip
+              state={filterCloud}
+              onClick={() => setFilterCloud(cycleTri(filterCloud))}
+              icon={<IconCloud size={12} />}
+              label="Cloud"
+              color="cyan"
             />
             {filtersActive && (
               <Tooltip label="Clear filters and search">

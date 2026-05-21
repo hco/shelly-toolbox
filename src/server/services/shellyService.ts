@@ -564,11 +564,12 @@ class ShellyService extends EventEmitter {
     try {
       console.log(`[Gen2 Status] Fetching eco mode, WiFi/Eth status, and BLE config for ${device.name}`);
 
-      const [ecoMode, wifiRssi, ethConnected, bleEnabled] = await Promise.all([
+      const [ecoMode, wifiRssi, ethConnected, bleEnabled, cloudEnabled] = await Promise.all([
         this.fetchGen2EcoMode(device.ipAddress, password),
         this.fetchGen2WifiRssi(device.ipAddress, password),
         this.fetchGen2EthStatus(device.ipAddress, password),
         this.fetchGen2BleConfig(device.ipAddress, password),
+        this.fetchGen2CloudConfig(device.ipAddress, password),
       ]);
 
       let changed = false;
@@ -588,9 +589,13 @@ class ShellyService extends EventEmitter {
         device.bleEnabled = bleEnabled;
         changed = true;
       }
+      if (cloudEnabled !== null) {
+        device.cloudEnabled = cloudEnabled;
+        changed = true;
+      }
 
       if (changed) {
-        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}, ethConnected=${ethConnected}, bleEnabled=${bleEnabled}`);
+        console.log(`[Gen2 Status] ${device.name}: ecoMode=${ecoMode}, wifiRssi=${wifiRssi}, ethConnected=${ethConnected}, bleEnabled=${bleEnabled}, cloudEnabled=${cloudEnabled}`);
         this.emit('deviceUpdate', device);
         this.emit('devicesChanged');
       }
@@ -640,6 +645,17 @@ class ShellyService extends EventEmitter {
     password: string | null
   ): Promise<boolean | null> {
     const response = await this.gen2Request(ipAddress, '/rpc/BLE.GetConfig', { password });
+    if (!response?.ok) return null;
+    const data = await response.json();
+    if (typeof data.enable === 'boolean') return data.enable;
+    return null;
+  }
+
+  private async fetchGen2CloudConfig(
+    ipAddress: string,
+    password: string | null
+  ): Promise<boolean | null> {
+    const response = await this.gen2Request(ipAddress, '/rpc/Cloud.GetConfig', { password });
     if (!response?.ok) return null;
     const data = await response.json();
     if (typeof data.enable === 'boolean') return data.enable;
@@ -1343,6 +1359,54 @@ class ShellyService extends EventEmitter {
     console.log(`[BLE] Successfully set BLE enabled=${enabled} for ${device.name}`);
 
     device.bleEnabled = enabled;
+    this.emit('deviceUpdate', device);
+    this.emit('devicesChanged');
+  }
+
+  async setCloudEnabled(deviceId: string, enabled: boolean): Promise<void> {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    if (!device.online) {
+      throw new Error(`Device ${device.name} is offline`);
+    }
+
+    if (device.gen < 2) {
+      throw new Error(`Cloud configuration is only available for Gen2+ devices`);
+    }
+
+    if (device.authStatus !== 'correct_password' && device.authStatus !== 'unprotected') {
+      throw new Error(`Cannot manage cloud: device ${device.name} is not authenticated`);
+    }
+
+    const password = configService.getShellyPassword();
+
+    console.log(`[Cloud] Setting cloud enabled=${enabled} for ${device.name}`);
+
+    const response = await this.gen2Request(device.ipAddress, '/rpc', {
+      method: 'POST',
+      body: { id: 1, method: 'Cloud.SetConfig', params: { config: { enable: enabled } } },
+      password,
+      timeoutMs: 10000,
+    });
+    if (!response) {
+      throw new Error(`Timeout setting cloud config for ${device.name}`);
+    }
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to set cloud config: ${response.status} ${text}`);
+    }
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(`Cloud.SetConfig failed: ${result.error.message || JSON.stringify(result.error)}`);
+    }
+
+    console.log(`[Cloud] Successfully set cloud enabled=${enabled} for ${device.name}`);
+
+    device.cloudEnabled = enabled;
     this.emit('deviceUpdate', device);
     this.emit('devicesChanged');
   }
