@@ -13,10 +13,28 @@ export interface MdnsDevice {
   friendlyName?: string;
 }
 
+interface MdnsRecord {
+  type: string;
+  name?: string;
+  data?: unknown;
+  ttl?: number;
+}
+
+interface MdnsResponsePacket {
+  answers?: MdnsRecord[];
+  additionals?: MdnsRecord[];
+}
+
+interface MdnsLike {
+  on(event: 'response', listener: (packet: MdnsResponsePacket) => void): void;
+  removeListener(event: 'response', listener: (packet: MdnsResponsePacket) => void): void;
+}
+
 class MdnsDiscovery extends EventEmitter {
   private bonjour: Bonjour;
   private browser: Browser | null = null;
   private discoveredDevices = new Map<string, MdnsDevice>();
+  private responseListener: ((packet: MdnsResponsePacket) => void) | null = null;
 
   constructor() {
     super();
@@ -35,12 +53,52 @@ class MdnsDiscovery extends EventEmitter {
     this.browser.on('down', (service) => {
       this.handleServiceLost(service);
     });
+
+    // bonjour-service only emits `up` on the *first* sighting and `txt-update`
+    // when TXT records change. Devices that quietly re-announce themselves
+    // never produce another event, so we tap the underlying multicast-dns
+    // stream to refresh liveness on every response packet.
+    const mdns = this.getRawMdns();
+    if (mdns && !this.responseListener) {
+      this.responseListener = (packet) => this.handleRawResponse(packet);
+      mdns.on('response', this.responseListener);
+    }
   }
 
   stop(): void {
     if (this.browser) {
       this.browser.stop();
       this.browser = null;
+    }
+    const mdns = this.getRawMdns();
+    if (mdns && this.responseListener) {
+      mdns.removeListener('response', this.responseListener);
+      this.responseListener = null;
+    }
+  }
+
+  private getRawMdns(): MdnsLike | null {
+    const server = (this.bonjour as unknown as { server?: { mdns?: MdnsLike } }).server;
+    return server?.mdns ?? null;
+  }
+
+  private handleRawResponse(packet: MdnsResponsePacket): void {
+    const records = [...(packet.answers ?? []), ...(packet.additionals ?? [])];
+    const seenIds = new Set<string>();
+    for (const rec of records) {
+      if (!rec || rec.ttl === 0) continue;
+      const candidates: string[] = [];
+      if (typeof rec.name === 'string') candidates.push(rec.name);
+      if (typeof rec.data === 'string') candidates.push(rec.data);
+      for (const candidate of candidates) {
+        const id = this.matchTechnicalName(candidate);
+        if (id && this.discoveredDevices.has(id)) {
+          seenIds.add(id);
+        }
+      }
+    }
+    for (const id of seenIds) {
+      this.emit('deviceSeen', id);
     }
   }
 

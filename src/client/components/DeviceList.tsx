@@ -1197,6 +1197,8 @@ export function DeviceList() {
                 </Group>
                 <Text size="xs" c="dimmed" mt="xs">
                   First seen {new Date(device.firstSeen).toLocaleString()}
+                  {' · '}
+                  Last seen {relativeTime(device.lastSeen)}
                 </Text>
               </Card>
             ))}

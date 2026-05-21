@@ -54,6 +54,7 @@ export const UnprovisionedDeviceSchema = z.object({
   gen: z.number().int().min(1).max(9),
   signalStrength: z.number(),
   firstSeen: z.iso.datetime(),
+  lastSeen: z.iso.datetime(),
 });
 
 export type UnprovisionedDevice = z.infer<typeof UnprovisionedDeviceSchema>;

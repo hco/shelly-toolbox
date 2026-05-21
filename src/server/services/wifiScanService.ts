@@ -206,6 +206,7 @@ class WifiScanService extends EventEmitter {
       } else {
         // Update existing AP (signal strength may have changed)
         this.knownShellyAPs.set(ap.ssid, ap);
+        this.emit('shellyAPSeen', ap);
       }
     }
 
@@ -235,12 +236,14 @@ class WifiScanService extends EventEmitter {
   }
 
   toUnprovisionedDevice(ap: ShellyAccessPoint): UnprovisionedDevice {
+    const now = new Date().toISOString();
     return {
       ssid: ap.ssid,
       macAddress: ap.macAddress,
       gen: ap.gen,
       signalStrength: ap.strength,
-      firstSeen: new Date().toISOString(),
+      firstSeen: now,
+      lastSeen: now,
     };
   }
 

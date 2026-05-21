@@ -218,6 +218,14 @@ class ShellyService extends EventEmitter {
         console.log(`[ShellyService] Lost unprovisioned device: ${ap.ssid}`);
       }
     });
+
+    wifiScanService.on('shellyAPSeen', (ap: ShellyAccessPoint) => {
+      const existing = this.unprovisionedDevices.get(ap.ssid);
+      if (!existing) return;
+      existing.lastSeen = new Date().toISOString();
+      existing.signalStrength = ap.strength;
+      this.emit('unprovisionedDevicesChanged');
+    });
   }
 
   private isDeviceAlreadyKnown(macAddress: string): boolean {
@@ -289,6 +297,15 @@ class ShellyService extends EventEmitter {
         this.emit('deviceUpdate', existing);
         this.emit('devicesChanged');
       }
+    });
+
+    mdnsDiscovery.on('deviceSeen', (id: string) => {
+      const existing = this.devices.get(id);
+      if (!existing) return;
+      existing.online = true;
+      existing.lastSeen = new Date().toISOString();
+      this.emit('deviceUpdate', existing);
+      this.emit('devicesChanged');
     });
   }
 
