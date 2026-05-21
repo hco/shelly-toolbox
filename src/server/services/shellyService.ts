@@ -20,16 +20,41 @@ import {
 } from './operations/gen2Scripts.js';
 import { scriptService, hashCode } from './scriptService.js';
 
+// Rediscover devices aggressively when a web client is watching, and slow
+// down when nobody's there. The `devicesChanged` event is only subscribed to
+// by the tRPC `onDevices` subscription, so its listener count == active
+// clients. Each requery is a single multicast PTR — cheap.
+const REQUERY_INTERVAL_ACTIVE_MS = 30_000;
+const REQUERY_INTERVAL_IDLE_MS = 15 * 60_000;
+
 class ShellyService extends EventEmitter {
   private devices: Map<string, Device> = new Map();
   private unprovisionedDevices: Map<string, UnprovisionedDevice> = new Map();
   private autoProvisioningEnabled = false;
   private httpClient = new ShellyHttpClient();
+  private requeryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
     this.setupMdnsListeners();
     mdnsDiscovery.start();
+    this.scheduleRequery(REQUERY_INTERVAL_ACTIVE_MS);
+    // When a client connects, jump to a fresh requery so the UI sees up-to-date
+    // state immediately instead of waiting out the idle timer.
+    this.on('newListener', (event) => {
+      if (event === 'devicesChanged' && this.listenerCount('devicesChanged') === 0) {
+        this.scheduleRequery(0);
+      }
+    });
+  }
+
+  private scheduleRequery(delayMs: number): void {
+    if (this.requeryTimer) clearTimeout(this.requeryTimer);
+    this.requeryTimer = setTimeout(() => {
+      mdnsDiscovery.requery();
+      const hasClients = this.listenerCount('devicesChanged') > 0;
+      this.scheduleRequery(hasClients ? REQUERY_INTERVAL_ACTIVE_MS : REQUERY_INTERVAL_IDLE_MS);
+    }, delayMs);
   }
 
   /**

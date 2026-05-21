@@ -107,6 +107,14 @@ class MdnsDiscovery extends EventEmitter {
     this.start();
   }
 
+  /**
+   * Send a fresh PTR query so currently-alive devices reply. Responses flow
+   * through the raw-response listener which emits `deviceSeen` per matching id.
+   */
+  requery(): void {
+    this.browser?.update();
+  }
+
   getDiscoveredDevices(): MdnsDevice[] {
     return Array.from(this.discoveredDevices.values());
   }
